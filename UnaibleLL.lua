@@ -1,6 +1,6 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v4
--- Polished white UI | F1 toggle | Emotes | Auto-open animation
+-- UnaibleLL - Client Visual Customization Suite v5
+-- Polished white UI | F1 toggle | Emotes | FOV Lock
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -13,6 +13,10 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
+
+-- FOV lock state (enforced every frame so the game can't override it)
+local lockedFOV = 70
+local fovLockEnabled = true
 
 -- ============================================================
 -- COLORS
@@ -103,7 +107,6 @@ local mainFrame = create("Frame", {
 addCorner(mainFrame, 16)
 addStroke(mainFrame, COLORS.BORDER, 1, 0.2)
 
--- Soft drop shadow
 create("ImageLabel", {
 	Name = "Shadow",
 	Size = UDim2.new(1, 60, 1, 60),
@@ -120,7 +123,7 @@ create("ImageLabel", {
 })
 
 -- ============================================================
--- TOP BAR (with gradient accent line)
+-- TOP BAR
 -- ============================================================
 local topBar = create("Frame", {
 	Name = "TopBar",
@@ -130,7 +133,6 @@ local topBar = create("Frame", {
 	Parent = mainFrame,
 })
 
--- Gradient accent bar at very top
 local accentLine = create("Frame", {
 	Size = UDim2.new(1, 0, 0, 3),
 	Position = UDim2.new(0, 0, 0, 0),
@@ -148,7 +150,6 @@ create("Frame", {
 	Parent = topBar,
 })
 
--- Logo circle
 local logoCircle = create("Frame", {
 	Size = UDim2.new(0, 30, 0, 30),
 	Position = UDim2.new(0, 16, 0.5, -15),
@@ -186,7 +187,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 158, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v4",
+	Text = "v5",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -302,7 +303,6 @@ local function switchToTab(name)
 	if allPages[name] then
 		local pg = allPages[name]
 		pg.Visible = true
-		-- subtle fade-in
 		pg.Position = UDim2.new(0, 0, 0, 8)
 		smoothTween(pg, {Position = UDim2.new(0, 0, 0, 0)}, 0.35)
 	end
@@ -554,7 +554,6 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 	return container
 end
 
--- Button component
 local function createButton(parent, label, layoutOrder, color, callback)
 	local btn = create("TextButton", {
 		Size = UDim2.new(1, 0, 0, 40),
@@ -577,7 +576,6 @@ local function createButton(parent, label, layoutOrder, color, callback)
 	return btn
 end
 
--- Text input component
 local function createInput(parent, label, placeholder, layoutOrder, callback)
 	local container = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 62),
@@ -641,8 +639,9 @@ createNavButton("⚙️", "Settings", 7)
 local camPage = createPage("Camera")
 createHeader(camPage, "Camera Controls", 0)
 
+-- FOV slider now updates the locked target value
 createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v)
-	smoothTween(camera, {FieldOfView = v}, 0.1)
+	lockedFOV = v
 end)
 createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v)
 	player.CameraMaxZoomDistance = v
@@ -653,8 +652,11 @@ end)
 createToggle(camPage, "Shift Lock Enabled", false, 4, function(state)
 	player.DevEnableMouseLock = state
 end)
-createToggle(camPage, "Freecam Mode (Q/E up-down)", false, 5, function(state)
-	-- Simple freecam: detaches camera and moves with WASD
+-- Toggle for the FOV lock (enabled by default)
+createToggle(camPage, "Lock FOV", true, 5, function(state)
+	fovLockEnabled = state
+end)
+createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
 	if state then
 		camera.CameraType = Enum.CameraType.Scriptable
 		local speed = 1
@@ -767,8 +769,17 @@ dustEmitter.Parent = weatherPart
 
 local rainActive, snowActive, dustActive, lightningActive = false, false, false, false
 
+-- Single RenderStepped loop: camera ref, FOV lock, weather follow
 RunService.RenderStepped:Connect(function()
-	if workspace.CurrentCamera ~= camera then camera = workspace.CurrentCamera end
+	if workspace.CurrentCamera ~= camera then
+		camera = workspace.CurrentCamera
+	end
+
+	-- Enforce locked FOV every frame so the game can't override it
+	if fovLockEnabled and camera.FieldOfView ~= lockedFOV then
+		camera.FieldOfView = lockedFOV
+	end
+
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
@@ -898,13 +909,11 @@ end)
 local emotePage = createPage("Emotes")
 createHeader(emotePage, "Emote Player", 0)
 
--- Emote state
 local currentTrack = nil
 local emoteLooped = false
 local emoteSpeed = 1
 local currentAnimId = nil
 
--- Get the humanoid's animator (works in R6 and R15)
 local function getAnimator()
 	local char = player.Character or player.CharacterAdded:Wait()
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -917,17 +926,14 @@ local function getAnimator()
 	return animator
 end
 
--- Play an emote by animation ID
 local function playEmote(animId)
 	if not animId or animId == "" then return end
-	-- Normalize: allow raw numbers or full asset URLs
 	local id = tostring(animId):match("%d+")
 	if not id then return end
 
 	local animator = getAnimator()
 	if not animator then return end
 
-	-- Stop previous
 	if currentTrack then
 		currentTrack:Stop(0.1)
 		currentTrack = nil
@@ -947,6 +953,12 @@ local function playEmote(animId)
 
 	currentTrack = track
 	track.Looped = emoteLooped
+
+	-- Highest priority so the emote plays over walking/running/jumping
+	pcall(function()
+		track.Priority = Enum.AnimationPriority.Action4
+	end)
+
 	track:Play(0.15)
 	track:AdjustSpeed(emoteSpeed)
 end
@@ -958,26 +970,22 @@ local function stopEmote()
 	end
 end
 
--- Custom emote ID input
 createInput(emotePage, "Custom Emote ID", "Enter animation ID (e.g. 507771019)", 1, function(text, enter)
 	if enter and text ~= "" then
 		playEmote(text)
 	end
 end)
 
--- Loop toggle
 createToggle(emotePage, "Loop Emote", false, 2, function(state)
 	emoteLooped = state
 	if currentTrack then
 		currentTrack.Looped = state
-		-- If enabling loop while a non-looped emote already finished, replay
 		if state and not currentTrack.IsPlaying and currentAnimId then
 			playEmote(currentAnimId)
 		end
 	end
 end)
 
--- Emote speed slider
 createSlider(emotePage, "Emote Speed", 0.1, 3, 1, 3, function(v)
 	emoteSpeed = v
 	if currentTrack then
@@ -985,14 +993,12 @@ createSlider(emotePage, "Emote Speed", 0.1, 3, 1, 3, function(v)
 	end
 end)
 
--- Stop button
 createButton(emotePage, "⏹ Stop Emote", 4, COLORS.DANGER, function()
 	stopEmote()
 end)
 
 createHeader(emotePage, "Preset Emotes", 5)
 
--- A few well-known default Roblox emote animation IDs
 local presetEmotes = {
 	{name = "💃 Dance 1", id = "507771019"},
 	{name = "🕺 Dance 2", id = "507776043"},
@@ -1009,7 +1015,6 @@ for i, emote in ipairs(presetEmotes) do
 	end)
 end
 
--- Reload emote track if character respawns
 player.CharacterAdded:Connect(function()
 	currentTrack = nil
 end)
@@ -1177,6 +1182,7 @@ createToggle(setPage, "Show Coordinates", false, 3, function(state)
 end)
 
 createButton(setPage, "Reset All to Default", 10, COLORS.DANGER, function()
+	lockedFOV = CONFIG.DEFAULT_FOV
 	camera.FieldOfView = CONFIG.DEFAULT_FOV
 	Lighting.ClockTime = CONFIG.DEFAULT_CLOCK
 	Lighting.Ambient = Color3.fromRGB(70, 70, 78)
@@ -1249,9 +1255,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
--- Set default tab and open with animation
+-- Initialize
 switchToTab("Camera")
 task.wait(0.5)
 openGui()
-
-camera.FieldOfView = CONFIG.DEFAULT_FOV
