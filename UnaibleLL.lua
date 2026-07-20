@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v12
+-- UnaibleLL - Client Visual Customization Suite v13
 -- Configs | Keybinds | HUD | Search | Server info | Player list
--- Waypoints | Tracers | Chams | Tweened teleport (anti-cheat friendly)
+-- Waypoints | Tracers | Chams | Spectate | Fast tweened teleport
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -27,7 +27,7 @@ local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
 local jumpLock = false
-local tpSpeed = 80
+local tpSpeed = 200
 
 -- Visuals state
 local tracersEnabled = false
@@ -200,6 +200,15 @@ local screenGui = create("ScreenGui", {
 	Parent = playerGui,
 })
 
+-- Dedicated ESP layer (renders on top, ignores topbar inset)
+local espGui = create("ScreenGui", {
+	Name = "UnaibleLL_ESP",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	DisplayOrder = 999,
+	Parent = playerGui,
+})
+
 -- ============================================================
 -- MAIN FRAME
 -- ============================================================
@@ -290,7 +299,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 150, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v12",
+	Text = "v13",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -1272,7 +1281,7 @@ end
 player.CharacterAdded:Connect(function() currentTrack = nil end)
 
 -- ============================================================
--- PAGE: PLAYER (with waypoints + tweened teleport)
+-- PAGE: PLAYER (waypoints + fast tweened teleport)
 -- ============================================================
 local playerPage = createPage("Player")
 createHeader(playerPage, "Player Modifiers", 0)
@@ -1285,18 +1294,17 @@ local function getHRP(char)
 	char = char or player.Character
 	return char and char:FindFirstChild("HumanoidRootPart")
 end
--- Tweened teleport: snaps short hops, glides long ones to dodge speed checks
+-- Fast teleport: snaps under 100 studs, glides longer hops quickly
 local function teleportTo(targetCFrame)
 	local hrp = getHRP()
 	if not hrp then return end
 	local dist = (targetCFrame.Position - hrp.Position).Magnitude
-	if dist < 30 then
+	if dist < 100 then
 		hrp.CFrame = targetCFrame
 		return
 	end
-	local duration = math.clamp(dist / tpSpeed, 0.1, 8)
-	local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
-	tween:Play()
+	local duration = math.clamp(dist / tpSpeed, 0.05, 3)
+	TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame}):Play()
 end
 
 createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
@@ -1344,7 +1352,7 @@ createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	local char = player.Character
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
-createSlider(playerPage, "Teleport Speed", 20, 300, 80, 12, function(v)
+createSlider(playerPage, "Teleport Speed", 20, 500, 200, 12, function(v)
 	tpSpeed = v
 end, "tpSpeed")
 
@@ -1493,11 +1501,11 @@ local function makeTracer(plr)
 	if tracerObjects[plr] then return end
 	local line = create("Frame", {
 		Name = "UnaibleLL_Tracer",
-		AnchorPoint = Vector2.new(0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = chamColor,
 		BorderSizePixel = 0,
-		ZIndex = 90,
-		Parent = screenGui,
+		ZIndex = 10,
+		Parent = espGui,
 	})
 	tracerObjects[plr] = line
 end
@@ -1637,15 +1645,17 @@ createHeader(plrPage, "Player List", 0)
 local spectating = nil
 local function stopSpectate()
 	spectating = nil
-	local hum = getHumanoid()
-	camera.CameraSubject = hum
 	camera.CameraType = Enum.CameraType.Custom
+	local hum = getHumanoid()
+	if hum then camera.CameraSubject = hum end
 end
 local function spectatePlayer(target)
-	if not target.Character then return end
-	local hum = target.Character:FindFirstChildOfClass("Humanoid")
+	local char = target.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum then
 		spectating = target
+		camera.CameraType = Enum.CameraType.Custom
 		camera.CameraSubject = hum
 	end
 end
@@ -1989,6 +1999,7 @@ RunService.RenderStepped:Connect(function()
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
+	-- Tracers
 	if tracersEnabled then
 		local teamCheck = toggleByName["Team Check (skip same team)"] and toggleByName["Team Check (skip same team)"].getState()
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -2001,13 +2012,13 @@ RunService.RenderStepped:Connect(function()
 						if not tracerObjects[plr] then makeTracer(plr) end
 						local ln = tracerObjects[plr]
 						local vpSize = camera.ViewportSize
-						local originX, originY = vpSize.X / 2, vpSize.Y
-						local dx = screenPos.X - originX
-						local dy = screenPos.Y - originY
+						local ox, oy = vpSize.X / 2, vpSize.Y
+						local dx = screenPos.X - ox
+						local dy = screenPos.Y - oy
 						local dist = math.sqrt(dx*dx + dy*dy)
 						local angle = math.atan2(dy, dx)
-						ln.Size = UDim2.new(0, 2, 0, dist)
-						ln.Position = UDim2.new(0, originX + dx/2, 0, originY + dy/2)
+						ln.Size = UDim2.fromOffset(2, dist)
+						ln.Position = UDim2.fromOffset(ox + dx/2, oy + dy/2)
 						ln.Rotation = math.deg(angle) - 90
 						ln.Visible = true
 					elseif tracerObjects[plr] then
@@ -2019,11 +2030,21 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
+	-- Rebuild chams if a target respawned without one
 	if chamsEnabled then
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= player and plr.Character and not chamObjects[plr] then
 				makeCham(plr)
 			end
+		end
+	end
+	-- Hold spectate camera on target
+	if spectating then
+		if spectating.Parent and spectating.Character then
+			local hum = spectating.Character:FindFirstChildOfClass("Humanoid")
+			if hum and camera.CameraSubject ~= hum then camera.CameraSubject = hum end
+		else
+			stopSpectate()
 		end
 	end
 end)
@@ -2035,12 +2056,6 @@ RunService.Heartbeat:Connect(function()
 		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
 	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if spectating then
-		if not spectating.Parent or not spectating.Character then stopSpectate() end
-	end
 end)
 
 -- ============================================================
