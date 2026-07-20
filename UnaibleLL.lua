@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v10
--- Named configs | Autoload | Keybinds | Functions HUD
--- Always-on WalkSpeed + Gravity lock | Polished UI
+-- UnaibleLL - Client Visual Customization Suite v11
+-- Configs | Keybinds | HUD | Search | Server info | Player list
+-- Waypoints | Tracers | Chams | Always-on WalkSpeed/Gravity lock
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -11,6 +11,8 @@ local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local Stats = game:GetService("Stats")
+local TeleportService = game:GetService("TeleportService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -24,13 +26,19 @@ local fovLockEnabled = true
 local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
-local jumpLock = false   -- toggled by bindable "Jump Lock"
+local jumpLock = false
+
+-- Visuals state
+local tracersEnabled = false
+local chamsEnabled = false
+local tracerObjects = {}   -- player -> {line drawing/frame}
+local chamObjects = {}     -- player -> Highlight
 
 -- ============================================================
--- STATE: config store, keybinds, control registry
+-- STATE: config store, keybinds, control registry, search
 -- ============================================================
 local STORE_FILE = "UnaibleLL_Store.json"
-local Store = { autoload = nil, configs = {} }
+local Store = { autoload = nil, configs = {}, waypoints = {} }
 local Config = {}
 local keybinds = {}
 local toggleList = {}
@@ -39,6 +47,12 @@ local controlAppliers = {}
 local bindListening = nil
 local updateHUD
 local refreshConfigList
+local refreshWaypoints
+local searchRegistry = {}
+
+local function registerSearchable(frame, label, parent)
+	table.insert(searchRegistry, {frame = frame, label = string.lower(label), parent = parent})
+end
 
 -- ============================================================
 -- FILE HELPERS
@@ -67,6 +81,7 @@ local function loadStore()
 	if ok2 and type(dec) == "table" then
 		Store = dec
 		Store.configs = Store.configs or {}
+		Store.waypoints = Store.waypoints or {}
 	end
 end
 
@@ -185,7 +200,7 @@ local screenGui = create("ScreenGui", {
 })
 
 -- ============================================================
--- MAIN FRAME (gradient border)
+-- MAIN FRAME
 -- ============================================================
 local mainFrame = create("Frame", {
 	Name = "MainPanel",
@@ -259,7 +274,7 @@ create("TextLabel", {
 	Parent = logoCircle,
 })
 create("TextLabel", {
-	Size = UDim2.new(0, 140, 1, 0),
+	Size = UDim2.new(0, 120, 1, 0),
 	Position = UDim2.new(0, 56, 0, 0),
 	BackgroundTransparency = 1,
 	Text = "UnaibleLL",
@@ -271,26 +286,36 @@ create("TextLabel", {
 })
 local badge = create("TextLabel", {
 	Size = UDim2.new(0, 36, 0, 18),
-	Position = UDim2.new(0, 158, 0.5, -9),
+	Position = UDim2.new(0, 150, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v10",
+	Text = "v11",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
 	Parent = topBar,
 })
 addCorner(badge, 5)
-create("TextLabel", {
-	Size = UDim2.new(0, 60, 1, 0),
-	Position = UDim2.new(1, -75, 0, 0),
-	BackgroundTransparency = 1,
-	Text = "[F1]",
-	TextColor3 = COLORS.TEXT_SECONDARY,
-	TextSize = 11,
-	Font = Enum.Font.GothamMedium,
+
+-- Search box (top bar)
+local searchBox = create("TextBox", {
+	Size = UDim2.new(0, 210, 0, 30),
+	Position = UDim2.new(1, -226, 0.5, -15),
+	BackgroundColor3 = COLORS.BG_CONTENT,
+	BorderSizePixel = 0,
+	Text = "",
+	PlaceholderText = "🔍 Search functions...",
+	PlaceholderColor3 = COLORS.TEXT_SECONDARY,
+	TextColor3 = COLORS.TEXT_PRIMARY,
+	TextSize = 12,
+	Font = Enum.Font.Gotham,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	ClearTextOnFocus = false,
 	Parent = topBar,
 })
+addCorner(searchBox, 8)
+addStroke(searchBox, COLORS.BORDER, 1, 0.4)
+addPadding(searchBox, 0, 0, 10, 10)
 
 -- ============================================================
 -- SIDEBAR
@@ -324,7 +349,7 @@ local sidebarInner = create("ScrollingFrame", {
 })
 create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = sidebarInner})
 
--- Sidebar profile footer
+-- Profile footer
 local footer = create("Frame", {
 	Size = UDim2.new(1, -18, 0, 44),
 	Position = UDim2.new(0, 9, 1, -50),
@@ -395,7 +420,25 @@ local function createPage(name)
 	return page
 end
 
+-- Search results page
+local searchPage = create("ScrollingFrame", {
+	Name = "SearchResults",
+	Size = UDim2.new(1, 0, 1, 0),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 3,
+	ScrollBarImageColor3 = COLORS.SCROLLBAR,
+	CanvasSize = UDim2.new(0, 0, 0, 0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	Visible = false,
+	Parent = contentArea,
+})
+addPadding(searchPage, 18, 18, 20, 20)
+create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10), Parent = searchPage})
+
 local function switchToTab(name)
+	if searchBox.Text ~= "" then searchBox.Text = "" end
+	searchPage.Visible = false
 	if activeTab == name then return end
 	for _, page in pairs(allPages) do page.Visible = false end
 	for _, info in pairs(allNavBtns) do
@@ -468,6 +511,46 @@ local function createNavButton(icon, name, order)
 	btn.MouseLeave:Connect(function() if activeTab ~= name then smoothTween(btn, {BackgroundTransparency = 1}, 0.15) end end)
 	btn.MouseButton1Click:Connect(function() switchToTab(name) end)
 end
+
+-- ============================================================
+-- SEARCH FILTER
+-- ============================================================
+local function applySearch(query)
+	query = string.lower((query or ""))
+	if query:gsub("%s+", "") == "" then
+		searchPage.Visible = false
+		for _, e in ipairs(searchRegistry) do
+			if e.frame.Parent ~= e.parent then e.frame.Parent = e.parent end
+			e.frame.Visible = true
+		end
+		local t = activeTab or "Camera"
+		activeTab = nil
+		switchToTab(t)
+		return
+	end
+	for _, pg in pairs(allPages) do pg.Visible = false end
+	for _, info in pairs(allNavBtns) do
+		info.accent.Visible = false
+		info.label.TextColor3 = COLORS.TEXT_SECONDARY
+		info.icon.TextColor3 = COLORS.TEXT_SECONDARY
+		info.btn.BackgroundTransparency = 1
+	end
+	activeTab = nil
+	for _, e in ipairs(searchRegistry) do
+		if string.find(e.label, query, 1, true) then
+			e.frame.Parent = searchPage
+			e.frame.Visible = true
+		else
+			if e.frame.Parent ~= e.parent then e.frame.Parent = e.parent end
+			e.frame.Visible = false
+		end
+	end
+	searchPage.Visible = true
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	applySearch(searchBox.Text)
+end)
 
 -- ============================================================
 -- COMPONENTS
@@ -608,6 +691,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 
 	if flag then controlAppliers[flag] = function(v) setValue(v, true) end end
 	if flag and Config[flag] ~= nil and callback then pcall(callback, initial) end
+	registerSearchable(container, label, parent)
 	return container
 end
 
@@ -711,6 +795,7 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 	handle.updateBindText()
 	if flag and Config[flag] ~= nil and state and callback then pcall(callback, state) end
 	if updateHUD then updateHUD() end
+	registerSearchable(container, label, parent)
 	return handle
 end
 
@@ -925,8 +1010,11 @@ createNavButton("🌧️", "Weather", 3)
 createNavButton("🎬", "Effects", 4)
 createNavButton("💃", "Emotes", 5)
 createNavButton("👤", "Player", 6)
-createNavButton("💾", "Configs", 7)
-createNavButton("⚙️", "Settings", 8)
+createNavButton("🎯", "Visuals", 7)
+createNavButton("📡", "Server", 8)
+createNavButton("👥", "Players", 9)
+createNavButton("💾", "Configs", 10)
+createNavButton("⚙️", "Settings", 11)
 
 -- ============================================================
 -- PAGE: CAMERA
@@ -979,11 +1067,21 @@ createSlider(envPage, "Fog Distance", 0, 100, 0, 4, function(v)
 end, "fog")
 createSlider(envPage, "Exposure", -3, 3, 0, 5, function(v) Lighting.ExposureCompensation = v end, "exposure")
 createToggle(envPage, "Global Shadows", true, 6, function(state) Lighting.GlobalShadows = state end, "shadows")
-createButton(envPage, "Set to Midnight 🌙", 7, COLORS.ACCENT_2, function() smoothTween(Lighting, {ClockTime = 0}, 0.5) end)
-createButton(envPage, "Set to Noon ☀️", 8, COLORS.ACCENT, function() smoothTween(Lighting, {ClockTime = 12}, 0.5) end)
+createToggle(envPage, "Fullbright", false, 7, function(state)
+	if state then
+		Lighting.Brightness = 3
+		Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+		Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+	else
+		Lighting.Ambient = Color3.fromRGB(70, 70, 78)
+		Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 78)
+	end
+end, "fullbright")
+createButton(envPage, "Set to Midnight 🌙", 8, COLORS.ACCENT_2, function() smoothTween(Lighting, {ClockTime = 0}, 0.5) end)
+createButton(envPage, "Set to Noon ☀️", 9, COLORS.ACCENT, function() smoothTween(Lighting, {ClockTime = 12}, 0.5) end)
 
 -- ============================================================
--- PAGE: WEATHER (all toggles UNbindable)
+-- PAGE: WEATHER
 -- ============================================================
 local wthPage = createPage("Weather")
 createHeader(wthPage, "Weather Effects", 0)
@@ -1173,7 +1271,7 @@ end
 player.CharacterAdded:Connect(function() currentTrack = nil end)
 
 -- ============================================================
--- PAGE: PLAYER
+-- PAGE: PLAYER (with waypoints)
 -- ============================================================
 local playerPage = createPage("Player")
 createHeader(playerPage, "Player Modifiers", 0)
@@ -1182,6 +1280,15 @@ local function getHumanoid()
 	if char then return char:FindFirstChildOfClass("Humanoid") end
 	return nil
 end
+local function getHRP(char)
+	char = char or player.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+local function teleportTo(cframe)
+	local hrp = getHRP()
+	if hrp then hrp.CFrame = cframe end
+end
+
 createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
 	targetWalkSpeed = v
 	local hum = getHumanoid()
@@ -1228,7 +1335,103 @@ createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
 
--- Re-apply values on respawn
+createHeader(playerPage, "Waypoints", 8)
+local wpNameBox = createInput(playerPage, "Waypoint Name", "Name this spot, then Save", 9, nil)
+createButton(playerPage, "📍 Save Current Position", 10, COLORS.ACCENT_GREEN, function()
+	local hrp = getHRP()
+	if hrp and wpNameBox.Text ~= "" then
+		local p = hrp.Position
+		Store.waypoints[wpNameBox.Text] = {p.X, p.Y, p.Z}
+		saveStore()
+		wpNameBox.Text = ""
+		if refreshWaypoints then refreshWaypoints() end
+	end
+end)
+local wpHolder = create("Frame", {
+	Size = UDim2.new(1, 0, 0, 10),
+	BackgroundTransparency = 1,
+	AutomaticSize = Enum.AutomaticSize.Y,
+	LayoutOrder = 11,
+	Parent = playerPage,
+})
+create("UIListLayout", {SortOrder = Enum.SortOrder.Name, Padding = UDim.new(0, 6), Parent = wpHolder})
+
+refreshWaypoints = function()
+	for _, c in pairs(wpHolder:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	local any = false
+	for name, pos in pairs(Store.waypoints) do
+		any = true
+		local row = create("Frame", {
+			Name = name,
+			Size = UDim2.new(1, 0, 0, 40),
+			BackgroundColor3 = COLORS.BG_CARD,
+			BorderSizePixel = 0,
+			Parent = wpHolder,
+		})
+		addCorner(row, 10)
+		addStroke(row, COLORS.BORDER, 1, 0.5)
+		create("TextLabel", {
+			Size = UDim2.new(1, -140, 1, 0),
+			Position = UDim2.new(0, 14, 0, 0),
+			BackgroundTransparency = 1,
+			Text = "📍 " .. name,
+			TextColor3 = COLORS.TEXT_PRIMARY,
+			TextSize = 12,
+			Font = Enum.Font.GothamMedium,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Parent = row,
+		})
+		local tpBtn = create("TextButton", {
+			Size = UDim2.new(0, 74, 0, 26),
+			Position = UDim2.new(1, -124, 0.5, -13),
+			BackgroundColor3 = COLORS.ACCENT,
+			BorderSizePixel = 0,
+			Text = "Teleport",
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			TextSize = 11,
+			Font = Enum.Font.GothamBold,
+			AutoButtonColor = false,
+			Parent = row,
+		})
+		addCorner(tpBtn, 6)
+		tpBtn.MouseButton1Click:Connect(function()
+			teleportTo(CFrame.new(pos[1], pos[2] + 3, pos[3]))
+		end)
+		local delBtn = create("TextButton", {
+			Size = UDim2.new(0, 40, 0, 26),
+			Position = UDim2.new(1, -46, 0.5, -13),
+			BackgroundColor3 = COLORS.DANGER,
+			BorderSizePixel = 0,
+			Text = "✕",
+			TextColor3 = Color3.fromRGB(255, 255, 255),
+			TextSize = 12,
+			Font = Enum.Font.GothamBold,
+			AutoButtonColor = false,
+			Parent = row,
+		})
+		addCorner(delBtn, 6)
+		delBtn.MouseButton1Click:Connect(function()
+			Store.waypoints[name] = nil
+			saveStore()
+			refreshWaypoints()
+		end)
+	end
+	if not any then
+		create("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 26),
+			BackgroundTransparency = 1,
+			Text = "No waypoints saved.",
+			TextColor3 = COLORS.TEXT_SECONDARY,
+			TextSize = 12,
+			Font = Enum.Font.Gotham,
+			Parent = wpHolder,
+		})
+	end
+end
+
 player.CharacterAdded:Connect(function(char)
 	local hum = char:WaitForChild("Humanoid", 5)
 	if hum then
@@ -1236,6 +1439,296 @@ player.CharacterAdded:Connect(function(char)
 		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
 	workspace.Gravity = targetGravity
+end)
+
+-- ============================================================
+-- PAGE: VISUALS (tracers + chams)
+-- ============================================================
+local visPage = createPage("Visuals")
+createHeader(visPage, "Player ESP", 0)
+
+local chamColor = Color3.fromRGB(88, 126, 255)
+
+local function removeTracer(plr)
+	if tracerObjects[plr] then
+		tracerObjects[plr]:Destroy()
+		tracerObjects[plr] = nil
+	end
+end
+local function removeCham(plr)
+	if chamObjects[plr] then
+		chamObjects[plr]:Destroy()
+		chamObjects[plr] = nil
+	end
+end
+local function makeCham(plr)
+	if chamObjects[plr] then return end
+	local char = plr.Character
+	if not char then return end
+	local hl = Instance.new("Highlight")
+	hl.Name = "UnaibleLL_Cham"
+	hl.FillColor = chamColor
+	hl.FillTransparency = 0.5
+	hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+	hl.OutlineTransparency = 0
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Adornee = char
+	hl.Parent = char
+	chamObjects[plr] = hl
+end
+local function makeTracer(plr)
+	if tracerObjects[plr] then return end
+	local line = create("Frame", {
+		Name = "UnaibleLL_Tracer",
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = chamColor,
+		BorderSizePixel = 0,
+		ZIndex = 90,
+		Parent = screenGui,
+	})
+	tracerObjects[plr] = line
+end
+
+createToggle(visPage, "Tracers", false, 1, function(state)
+	tracersEnabled = state
+	if not state then
+		for plr, _ in pairs(tracerObjects) do removeTracer(plr) end
+	end
+end, "tracers")
+createToggle(visPage, "Chams / Highlight", false, 2, function(state)
+	chamsEnabled = state
+	if state then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player then makeCham(plr) end
+		end
+	else
+		for plr, _ in pairs(chamObjects) do removeCham(plr) end
+	end
+end, "chams")
+createSlider(visPage, "ESP Color (Hue)", 0, 360, 220, 3, function(v)
+	chamColor = Color3.fromHSV(v / 360, 0.7, 1)
+	for _, hl in pairs(chamObjects) do hl.FillColor = chamColor end
+	for _, ln in pairs(tracerObjects) do ln.BackgroundColor3 = chamColor end
+end, "espHue")
+createToggle(visPage, "Team Check (skip same team)", false, 4, function() end, "teamCheck")
+
+-- Cleanup on leave / rebuild on respawn
+Players.PlayerRemoving:Connect(function(plr)
+	removeTracer(plr)
+	removeCham(plr)
+end)
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		task.wait(0.5)
+		if chamsEnabled and plr ~= player then makeCham(plr) end
+	end)
+end)
+for _, plr in ipairs(Players:GetPlayers()) do
+	if plr ~= player then
+		plr.CharacterAdded:Connect(function()
+			task.wait(0.5)
+			if chamsEnabled then makeCham(plr) end
+		end)
+	end
+end
+
+-- ============================================================
+-- PAGE: SERVER (info panel)
+-- ============================================================
+local srvPage = createPage("Server")
+createHeader(srvPage, "Server Info", 0)
+
+local function infoCard(parent, label, order)
+	local card = create("Frame", {
+		Size = UDim2.new(1, 0, 0, 54),
+		BackgroundColor3 = COLORS.BG_CARD,
+		BorderSizePixel = 0,
+		LayoutOrder = order,
+		Parent = parent,
+	})
+	addCorner(card, 10)
+	addStroke(card, COLORS.BORDER, 1, 0.5)
+	create("TextLabel", {
+		Size = UDim2.new(1, -24, 0, 18),
+		Position = UDim2.new(0, 14, 0, 8),
+		BackgroundTransparency = 1,
+		Text = label,
+		TextColor3 = COLORS.TEXT_SECONDARY,
+		TextSize = 11,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = card,
+	})
+	local val = create("TextLabel", {
+		Size = UDim2.new(1, -24, 0, 22),
+		Position = UDim2.new(0, 14, 0, 26),
+		BackgroundTransparency = 1,
+		Text = "...",
+		TextColor3 = COLORS.TEXT_PRIMARY,
+		TextSize = 16,
+		Font = Enum.Font.GothamBold,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = card,
+	})
+	return val
+end
+
+local pingVal = infoCard(srvPage, "Ping (ms)", 1)
+local playersVal = infoCard(srvPage, "Players in Server", 2)
+local fpsVal = infoCard(srvPage, "FPS", 3)
+local ageVal = infoCard(srvPage, "Session Time", 4)
+local jobVal = infoCard(srvPage, "Server (Job) ID", 5)
+
+createButton(srvPage, "🔄 Rejoin Server", 6, COLORS.ACCENT, function()
+	pcall(function()
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+	end)
+end)
+createButton(srvPage, "🎲 Server Hop (new server)", 7, COLORS.ACCENT_2, function()
+	pcall(function()
+		TeleportService:Teleport(game.PlaceId, player)
+	end)
+end)
+
+local sessionStart = tick()
+task.spawn(function()
+	local frameCount, lastT, fpsShown = 0, tick(), 0
+	RunService.RenderStepped:Connect(function()
+		frameCount += 1
+		if tick() - lastT >= 1 then
+			fpsShown = frameCount
+			frameCount = 0
+			lastT = tick()
+		end
+	end)
+	while true do
+		-- Ping
+		local okPing, ping = pcall(function()
+			return math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+		end)
+		pingVal.Text = okPing and (ping .. " ms") or "N/A"
+		-- Players
+		playersVal.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
+		-- FPS
+		fpsVal.Text = tostring(fpsShown)
+		-- Session time
+		local secs = math.floor(tick() - sessionStart)
+		ageVal.Text = string.format("%02d:%02d:%02d", math.floor(secs/3600), math.floor((secs%3600)/60), secs%60)
+		-- Job id
+		jobVal.Text = (game.JobId ~= "" and game.JobId:sub(1, 18) .. "...") or "Studio"
+		jobVal.TextSize = 12
+		task.wait(1)
+	end
+end)
+
+-- ============================================================
+-- PAGE: PLAYERS (list, teleport, spectate)
+-- ============================================================
+local plrPage = createPage("Players")
+createHeader(plrPage, "Player List", 0)
+
+local spectating = nil
+local function stopSpectate()
+	spectating = nil
+	local hum = getHumanoid()
+	camera.CameraSubject = hum
+	camera.CameraType = Enum.CameraType.Custom
+end
+local function spectatePlayer(target)
+	if not target.Character then return end
+	local hum = target.Character:FindFirstChildOfClass("Humanoid")
+	if hum then
+		spectating = target
+		camera.CameraSubject = hum
+	end
+end
+
+local plrListHolder = create("Frame", {
+	Size = UDim2.new(1, 0, 0, 10),
+	BackgroundTransparency = 1,
+	AutomaticSize = Enum.AutomaticSize.Y,
+	LayoutOrder = 1,
+	Parent = plrPage,
+})
+create("UIListLayout", {SortOrder = Enum.SortOrder.Name, Padding = UDim.new(0, 6), Parent = plrListHolder})
+
+createButton(plrPage, "⏹ Stop Spectating", 2, COLORS.DANGER, function() stopSpectate() end)
+
+local function refreshPlayers()
+	for _, c in pairs(plrListHolder:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player then
+			local row = create("Frame", {
+				Name = plr.Name,
+				Size = UDim2.new(1, 0, 0, 46),
+				BackgroundColor3 = COLORS.BG_CARD,
+				BorderSizePixel = 0,
+				Parent = plrListHolder,
+			})
+			addCorner(row, 10)
+			addStroke(row, COLORS.BORDER, 1, 0.5)
+			local pic = create("ImageLabel", {
+				Size = UDim2.new(0, 30, 0, 30),
+				Position = UDim2.new(0, 8, 0.5, -15),
+				BackgroundColor3 = COLORS.BG_HOVER,
+				BorderSizePixel = 0,
+				Image = "rbxthumb://type=AvatarHeadShot&id=" .. plr.UserId .. "&w=48&h=48",
+				Parent = row,
+			})
+			addCorner(pic, 15)
+			create("TextLabel", {
+				Size = UDim2.new(1, -190, 1, 0),
+				Position = UDim2.new(0, 46, 0, 0),
+				BackgroundTransparency = 1,
+				Text = plr.DisplayName,
+				TextColor3 = COLORS.TEXT_PRIMARY,
+				TextSize = 12,
+				Font = Enum.Font.GothamMedium,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Parent = row,
+			})
+			local tpBtn = create("TextButton", {
+				Size = UDim2.new(0, 62, 0, 26),
+				Position = UDim2.new(1, -132, 0.5, -13),
+				BackgroundColor3 = COLORS.ACCENT,
+				BorderSizePixel = 0,
+				Text = "Teleport",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextSize = 10,
+				Font = Enum.Font.GothamBold,
+				AutoButtonColor = false,
+				Parent = row,
+			})
+			addCorner(tpBtn, 6)
+			tpBtn.MouseButton1Click:Connect(function()
+				local thrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+				if thrp then teleportTo(thrp.CFrame * CFrame.new(0, 0, 3)) end
+			end)
+			local specBtn = create("TextButton", {
+				Size = UDim2.new(0, 62, 0, 26),
+				Position = UDim2.new(1, -66, 0.5, -13),
+				BackgroundColor3 = COLORS.ACCENT_2,
+				BorderSizePixel = 0,
+				Text = "Spectate",
+				TextColor3 = Color3.fromRGB(255, 255, 255),
+				TextSize = 10,
+				Font = Enum.Font.GothamBold,
+				AutoButtonColor = false,
+				Parent = row,
+			})
+			addCorner(specBtn, 6)
+			specBtn.MouseButton1Click:Connect(function() spectatePlayer(plr) end)
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function() task.wait(0.3); refreshPlayers() end)
+Players.PlayerRemoving:Connect(function(plr)
+	if spectating == plr then stopSpectate() end
+	task.wait(0.3); refreshPlayers()
 end)
 
 -- ============================================================
@@ -1416,38 +1909,21 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 createToggle(setPage, "Show Functions HUD", false, 3, function(state) hudFrame.Visible = state; if state then updateHUD() end end, "showHUD")
-createToggle(setPage, "Show Coordinates", false, 4, function(state)
-	local existing = screenGui:FindFirstChild("CoordsLabel")
-	if state then
-		if not existing then
-			local coordLbl = create("TextLabel", {
-				Name = "CoordsLabel",
-				Size = UDim2.new(0, 200, 0, 24),
-				Position = UDim2.new(0, 10, 1, -34),
-				BackgroundColor3 = COLORS.BG_CARD,
-				BackgroundTransparency = 0.2,
-				Text = "X: 0  Y: 0  Z: 0",
-				TextColor3 = COLORS.TEXT_PRIMARY,
-				TextSize = 11,
-				Font = Enum.Font.GothamMedium,
-				ZIndex = 200,
-				Parent = screenGui,
-			})
-			addCorner(coordLbl, 6)
-			RunService.RenderStepped:Connect(function()
-				if coordLbl and coordLbl.Parent and coordLbl.Visible then
-					local char = player.Character
-					if char and char:FindFirstChild("HumanoidRootPart") then
-						local pos = char.HumanoidRootPart.Position
-						coordLbl.Text = string.format("X: %.0f  Y: %.0f  Z: %.0f", pos.X, pos.Y, pos.Z)
-					end
-				end
-			end)
-		end
-	else
-		if existing then existing:Destroy() end
+createToggle(setPage, "Anti-AFK", false, 4, function(state)
+	if state and not _G.UnaibleLL_AntiAFK then
+		_G.UnaibleLL_AntiAFK = true
+		local vu = game:GetService("VirtualUser")
+		player.Idled:Connect(function()
+			if toggleByName["Anti-AFK"] and toggleByName["Anti-AFK"].getState() then
+				pcall(function()
+					vu:Button2Down(Vector2.new(0, 0), camera.CFrame)
+					task.wait(1)
+					vu:Button2Up(Vector2.new(0, 0), camera.CFrame)
+				end)
+			end
+		end)
 	end
-end, "coords")
+end, "antiafk")
 
 -- ============================================================
 -- WINDOW DRAGGING
@@ -1506,9 +1982,47 @@ RunService.RenderStepped:Connect(function()
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
+	-- Tracers
+	if tracersEnabled then
+		local teamCheck = toggleByName["Team Check (skip same team)"] and toggleByName["Team Check (skip same team)"].getState()
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player and not (teamCheck and plr.Team == player.Team) then
+				local char = plr.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+					if onScreen then
+						if not tracerObjects[plr] then makeTracer(plr) end
+						local ln = tracerObjects[plr]
+						local vpSize = camera.ViewportSize
+						local originX, originY = vpSize.X / 2, vpSize.Y
+						local dx = screenPos.X - originX
+						local dy = screenPos.Y - originY
+						local dist = math.sqrt(dx*dx + dy*dy)
+						local angle = math.atan2(dy, dx)
+						ln.Size = UDim2.new(0, 2, 0, dist)
+						ln.Position = UDim2.new(0, originX + dx/2, 0, originY + dy/2)
+						ln.Rotation = math.deg(angle) - 90
+						ln.Visible = true
+					elseif tracerObjects[plr] then
+						tracerObjects[plr].Visible = false
+					end
+				elseif tracerObjects[plr] then
+					tracerObjects[plr].Visible = false
+				end
+			end
+		end
+	end
+	-- Rebuild chams if a target respawned without one
+	if chamsEnabled then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character and not chamObjects[plr] then
+				makeCham(plr)
+			end
+		end
+	end
 end)
 
--- WalkSpeed + Gravity always locked; Jump locked only when Jump Lock is on
 RunService.Heartbeat:Connect(function()
 	local hum = getHumanoid()
 	if hum then
@@ -1518,12 +2032,19 @@ RunService.Heartbeat:Connect(function()
 	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
 end)
 
+-- Keep spectate camera valid
+RunService.RenderStepped:Connect(function()
+	if spectating then
+		if not spectating.Parent or not spectating.Character then stopSpectate() end
+	end
+end)
+
 -- ============================================================
 -- F1 TOGGLE + OPEN ANIMATION
 -- ============================================================
 local guiOpen = false
-local FULL_SIZE = UDim2.new(0, 720, 0, 500)
-local FULL_POS = UDim2.new(0.5, -360, 0.5, -250)
+local FULL_SIZE = UDim2.new(0, 760, 0, 520)
+local FULL_POS = UDim2.new(0.5, -380, 0.5, -260)
 local function openGui()
 	guiOpen = true
 	mainFrame.Visible = true
@@ -1549,6 +2070,8 @@ end)
 -- ============================================================
 switchToTab("Camera")
 refreshConfigList()
+refreshWaypoints()
+refreshPlayers()
 updateHUD()
 
 if Store.autoload and Store.configs[Store.autoload] then
