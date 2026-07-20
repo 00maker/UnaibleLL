@@ -1,8 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v2
--- Clean white theme, smooth animations, weather effects
+-- UnaibleLL - Client Visual Customization Suite v3
+-- Clean white theme | F1 toggle | Auto-opens with animation
 -- Place in StarterPlayerScripts or StarterGui
--- Toggle with F1
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -16,7 +15,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
 -- ============================================================
--- COLOR PALETTE
+-- COLORS
 -- ============================================================
 local COLORS = {
 	BG_MAIN = Color3.fromRGB(240, 242, 248),
@@ -24,7 +23,6 @@ local COLORS = {
 	BG_CONTENT = Color3.fromRGB(245, 247, 252),
 	BG_CARD = Color3.fromRGB(255, 255, 255),
 	BG_HOVER = Color3.fromRGB(232, 236, 248),
-	BG_INPUT = Color3.fromRGB(225, 228, 238),
 	BG_TRACK = Color3.fromRGB(210, 215, 228),
 	ACCENT = Color3.fromRGB(80, 120, 255),
 	ACCENT_GREEN = Color3.fromRGB(60, 190, 110),
@@ -34,13 +32,11 @@ local COLORS = {
 	TOPBAR = Color3.fromRGB(255, 255, 255),
 	SCROLLBAR = Color3.fromRGB(180, 188, 210),
 	DANGER = Color3.fromRGB(220, 70, 80),
-	SHADOW = Color3.fromRGB(180, 185, 200),
 }
 
 local CONFIG = {
 	DEFAULT_FOV = 70, MIN_FOV = 30, MAX_FOV = 120,
 	DEFAULT_CLOCK = 14, MIN_CLOCK = 0, MAX_CLOCK = 24,
-	TWEEN_SPEED = 0.35,
 }
 
 -- ============================================================
@@ -56,28 +52,21 @@ local function create(className, props)
 end
 
 local function smoothTween(obj, props, duration)
-	local info = TweenInfo.new(duration or 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
-	local t = TweenService:Create(obj, info, props)
+	local t = TweenService:Create(obj, TweenInfo.new(duration or 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), props)
 	t:Play()
 	return t
 end
 
-local function addCorner(parent, radius)
-	return create("UICorner", { CornerRadius = UDim.new(0, radius or 10), Parent = parent })
+local function addCorner(p, r)
+	return create("UICorner", {CornerRadius = UDim.new(0, r or 10), Parent = p})
 end
 
-local function addStroke(parent, color, thickness, transparency)
-	return create("UIStroke", { Color = color or COLORS.BORDER, Thickness = thickness or 1, Transparency = transparency or 0, Parent = parent })
+local function addStroke(p, c, th, tr)
+	return create("UIStroke", {Color = c or COLORS.BORDER, Thickness = th or 1, Transparency = tr or 0, Parent = p})
 end
 
-local function addPadding(parent, top, bot, left, right)
-	return create("UIPadding", {
-		PaddingTop = UDim.new(0, top or 0),
-		PaddingBottom = UDim.new(0, bot or 0),
-		PaddingLeft = UDim.new(0, left or 0),
-		PaddingRight = UDim.new(0, right or 0),
-		Parent = parent,
-	})
+local function addPadding(p, t, b, l, r)
+	return create("UIPadding", {PaddingTop=UDim.new(0,t or 0), PaddingBottom=UDim.new(0,b or 0), PaddingLeft=UDim.new(0,l or 0), PaddingRight=UDim.new(0,r or 0), Parent=p})
 end
 
 -- ============================================================
@@ -91,17 +80,15 @@ local screenGui = create("ScreenGui", {
 })
 
 -- ============================================================
--- MAIN FRAME
+-- MAIN FRAME (starts invisible for open anim)
 -- ============================================================
 local mainFrame = create("Frame", {
 	Name = "MainPanel",
-	Size = UDim2.new(0, 700, 0, 480),
-	Position = UDim2.new(0.5, -350, 0.5, -240),
+	Size = UDim2.new(0, 0, 0, 0),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
 	BackgroundColor3 = COLORS.BG_MAIN,
-	BackgroundTransparency = 0,
 	BorderSizePixel = 0,
 	ClipsDescendants = true,
-	Visible = false,
 	Parent = screenGui,
 })
 addCorner(mainFrame, 14)
@@ -149,23 +136,22 @@ create("TextLabel", {
 	Parent = topBar,
 })
 
-local versionBadge = create("TextLabel", {
+local badge = create("TextLabel", {
 	Size = UDim2.new(0, 36, 0, 18),
-	Position = UDim2.new(0, 150, 0, 15),
+	Position = UDim2.new(0, 152, 0, 15),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v2",
+	Text = "v3",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
 	Parent = topBar,
 })
-addCorner(versionBadge, 4)
+addCorner(badge, 4)
 
--- Keybind hint
 create("TextLabel", {
-	Size = UDim2.new(0, 80, 0, 48),
-	Position = UDim2.new(1, -100, 0, 0),
+	Size = UDim2.new(0, 60, 0, 48),
+	Position = UDim2.new(1, -75, 0, 0),
 	BackgroundTransparency = 1,
 	Text = "[F1]",
 	TextColor3 = COLORS.TEXT_SECONDARY,
@@ -175,14 +161,15 @@ create("TextLabel", {
 })
 
 -- ============================================================
--- SIDEBAR
+-- SIDEBAR CONTAINER
 -- ============================================================
-local sidebar = create("Frame", {
+local sidebarFrame = create("Frame", {
 	Name = "Sidebar",
 	Size = UDim2.new(0, 170, 1, -48),
 	Position = UDim2.new(0, 0, 0, 48),
 	BackgroundColor3 = COLORS.BG_SIDEBAR,
 	BorderSizePixel = 0,
+	ClipsDescendants = true,
 	Parent = mainFrame,
 })
 
@@ -192,21 +179,28 @@ create("Frame", {
 	BackgroundColor3 = COLORS.BORDER,
 	BackgroundTransparency = 0.4,
 	BorderSizePixel = 0,
-	Parent = sidebar,
+	Parent = sidebarFrame,
+})
+
+local sidebarInner = create("Frame", {
+	Name = "Inner",
+	Size = UDim2.new(1, -20, 1, -28),
+	Position = UDim2.new(0, 10, 0, 14),
+	BackgroundTransparency = 1,
+	Parent = sidebarFrame,
 })
 
 create("UIListLayout", {
 	SortOrder = Enum.SortOrder.LayoutOrder,
 	Padding = UDim.new(0, 4),
-	Parent = sidebar,
+	Parent = sidebarInner,
 })
-addPadding(sidebar, 14, 14, 10, 10)
 
 -- ============================================================
 -- CONTENT AREA
 -- ============================================================
 local contentArea = create("Frame", {
-	Name = "ContentArea",
+	Name = "Content",
 	Size = UDim2.new(1, -170, 1, -48),
 	Position = UDim2.new(0, 170, 0, 48),
 	BackgroundColor3 = COLORS.BG_CONTENT,
@@ -216,14 +210,15 @@ local contentArea = create("Frame", {
 })
 
 -- ============================================================
--- PAGE CREATION
+-- TAB SYSTEM
 -- ============================================================
-local pages = {}
-local currentTab = "Camera"
+local allPages = {}
+local allNavBtns = {}
+local activeTab = nil
 
 local function createPage(name)
 	local page = create("ScrollingFrame", {
-		Name = name .. "Page",
+		Name = name,
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -231,7 +226,7 @@ local function createPage(name)
 		ScrollBarImageColor3 = COLORS.SCROLLBAR,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		Visible = (name == currentTab),
+		Visible = false,
 		Parent = contentArea,
 	})
 	addPadding(page, 18, 18, 20, 20)
@@ -240,16 +235,105 @@ local function createPage(name)
 		Padding = UDim.new(0, 10),
 		Parent = page,
 	})
-	pages[name] = page
+	allPages[name] = page
 	return page
 end
 
+local function switchToTab(name)
+	if activeTab == name then return end
+
+	-- Hide all pages, deactivate all buttons
+	for tabName, page in pairs(allPages) do
+		page.Visible = false
+	end
+	for tabName, info in pairs(allNavBtns) do
+		info.accent.Visible = false
+		info.label.TextColor3 = COLORS.TEXT_SECONDARY
+		smoothTween(info.btn, {BackgroundTransparency = 1}, 0.2)
+	end
+
+	-- Activate selected
+	activeTab = name
+	if allPages[name] then
+		allPages[name].Visible = true
+	end
+	if allNavBtns[name] then
+		allNavBtns[name].accent.Visible = true
+		allNavBtns[name].label.TextColor3 = COLORS.TEXT_PRIMARY
+		allNavBtns[name].btn.BackgroundTransparency = 0
+		allNavBtns[name].btn.BackgroundColor3 = COLORS.BG_HOVER
+	end
+end
+
+local function createNavButton(icon, name, order)
+	local btn = create("TextButton", {
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundColor3 = COLORS.BG_HOVER,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Text = "",
+		LayoutOrder = order,
+		AutoButtonColor = false,
+		Parent = sidebarInner,
+	})
+	addCorner(btn, 10)
+
+	local accent = create("Frame", {
+		Size = UDim2.new(0, 3, 0, 18),
+		Position = UDim2.new(0, 2, 0.5, -9),
+		BackgroundColor3 = COLORS.ACCENT,
+		BorderSizePixel = 0,
+		Visible = false,
+		Parent = btn,
+	})
+	addCorner(accent, 2)
+
+	create("TextLabel", {
+		Size = UDim2.new(0, 24, 1, 0),
+		Position = UDim2.new(0, 14, 0, 0),
+		BackgroundTransparency = 1,
+		Text = icon,
+		TextSize = 14,
+		Font = Enum.Font.Gotham,
+		TextColor3 = COLORS.TEXT_PRIMARY,
+		Parent = btn,
+	})
+
+	local lbl = create("TextLabel", {
+		Size = UDim2.new(1, -48, 1, 0),
+		Position = UDim2.new(0, 42, 0, 0),
+		BackgroundTransparency = 1,
+		Text = name,
+		TextSize = 13,
+		Font = Enum.Font.GothamMedium,
+		TextColor3 = COLORS.TEXT_SECONDARY,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = btn,
+	})
+
+	allNavBtns[name] = {btn = btn, accent = accent, label = lbl}
+
+	btn.MouseEnter:Connect(function()
+		if activeTab ~= name then
+			smoothTween(btn, {BackgroundTransparency = 0.5}, 0.15)
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if activeTab ~= name then
+			smoothTween(btn, {BackgroundTransparency = 1}, 0.15)
+		end
+	end)
+	btn.MouseButton1Click:Connect(function()
+		switchToTab(name)
+	end)
+end
+
 -- ============================================================
--- SECTION HEADER
+-- COMPONENTS
 -- ============================================================
 local function createHeader(parent, text, order)
 	create("TextLabel", {
-		Size = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.new(1, 0, 0, 26),
 		BackgroundTransparency = 1,
 		Text = text,
 		TextColor3 = COLORS.TEXT_PRIMARY,
@@ -261,9 +345,6 @@ local function createHeader(parent, text, order)
 	})
 end
 
--- ============================================================
--- SLIDER COMPONENT
--- ============================================================
 local function createSlider(parent, label, min, max, default, layoutOrder, callback)
 	local container = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 64),
@@ -276,7 +357,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	addStroke(container, COLORS.BORDER, 1, 0.5)
 
 	create("TextLabel", {
-		Size = UDim2.new(0.65, 0, 0, 22),
+		Size = UDim2.new(0.6, 0, 0, 22),
 		Position = UDim2.new(0, 16, 0, 8),
 		BackgroundTransparency = 1,
 		Text = label,
@@ -288,8 +369,8 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	})
 
 	local valueLbl = create("TextLabel", {
-		Size = UDim2.new(0.3, 0, 0, 22),
-		Position = UDim2.new(0.67, 0, 0, 8),
+		Size = UDim2.new(0.35, 0, 0, 22),
+		Position = UDim2.new(0.62, 0, 0, 8),
 		BackgroundTransparency = 1,
 		Text = tostring(default),
 		TextColor3 = COLORS.ACCENT,
@@ -301,7 +382,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 
 	local track = create("Frame", {
 		Size = UDim2.new(1, -32, 0, 6),
-		Position = UDim2.new(0, 16, 0, 42),
+		Position = UDim2.new(0, 16, 0, 44),
 		BackgroundColor3 = COLORS.BG_TRACK,
 		BorderSizePixel = 0,
 		Parent = container,
@@ -329,58 +410,50 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	addCorner(knob, 8)
 	addStroke(knob, COLORS.ACCENT, 2, 0)
 
-	local dragging = false
+	local isDragging = false
 
 	local function update(inputX)
-		local pos = track.AbsolutePosition.X
-		local size = track.AbsoluteSize.X
-		local rel = math.clamp((inputX - pos) / size, 0, 1)
-		local value = min + (max - min) * rel
-
+		local p = track.AbsolutePosition.X
+		local s = track.AbsoluteSize.X
+		local rel = math.clamp((inputX - p) / s, 0, 1)
+		local val = min + (max - min) * rel
 		if (max - min) <= 10 then
-			value = math.floor(value * 10 + 0.5) / 10
+			val = math.floor(val * 10 + 0.5) / 10
 		else
-			value = math.floor(value + 0.5)
+			val = math.floor(val + 0.5)
 		end
-
-		local displayRel = (value - min) / (max - min)
-		smoothTween(fill, { Size = UDim2.new(displayRel, 0, 1, 0) }, 0.06)
-		smoothTween(knob, { Position = UDim2.new(displayRel, -8, 0.5, -8) }, 0.06)
-		valueLbl.Text = tostring(value)
-		if callback then callback(value) end
+		local dr = math.clamp((val - min) / (max - min), 0, 1)
+		smoothTween(fill, {Size = UDim2.new(dr, 0, 1, 0)}, 0.05)
+		smoothTween(knob, {Position = UDim2.new(dr, -8, 0.5, -8)}, 0.05)
+		valueLbl.Text = tostring(val)
+		if callback then callback(val) end
 	end
 
 	track.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
+			isDragging = true
 			update(input.Position.X)
 		end
 	end)
-
 	knob.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
+			isDragging = true
 		end
 	end)
-
 	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			update(input.Position.X)
 		end
 	end)
-
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
+			isDragging = false
 		end
 	end)
 
 	return container
 end
 
--- ============================================================
--- TOGGLE COMPONENT
--- ============================================================
 local function createToggle(parent, label, default, layoutOrder, callback)
 	local container = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 46),
@@ -423,7 +496,6 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 	addCorner(toggleKnob, 9)
 
 	local state = default
-
 	local btn = create("TextButton", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
@@ -433,8 +505,8 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 
 	btn.MouseButton1Click:Connect(function()
 		state = not state
-		smoothTween(toggleBg, { BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK }, 0.25)
-		smoothTween(toggleKnob, { Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9) }, 0.25)
+		smoothTween(toggleBg, {BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK}, 0.25)
+		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)}, 0.25)
 		if callback then callback(state) end
 	end)
 
@@ -442,140 +514,45 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 end
 
 -- ============================================================
--- NAV ITEMS + TAB SWITCHING
+-- CREATE NAV BUTTONS (order matters)
 -- ============================================================
-local navItems = {
-	{ icon = "🎥", label = "Camera", order = 1 },
-	{ icon = "🌤️", label = "Environment", order = 2 },
-	{ icon = "🌧️", label = "Weather", order = 3 },
-	{ icon = "🎬", label = "Effects", order = 4 },
-	{ icon = "⚙️", label = "Settings", order = 5 },
-}
-
-local navButtons = {}
-
-local function switchTab(tabName)
-	if tabName == currentTab then return end
-
-	-- Deactivate old
-	local old = navButtons[currentTab]
-	if old then
-		smoothTween(old.button, { BackgroundTransparency = 1 }, 0.25)
-		old.accent.Visible = false
-		old.nameLabel.TextColor3 = COLORS.TEXT_SECONDARY
-	end
-	if pages[currentTab] then
-		pages[currentTab].Visible = false
-	end
-
-	currentTab = tabName
-
-	-- Activate new
-	local new = navButtons[currentTab]
-	if new then
-		new.button.BackgroundTransparency = 0
-		smoothTween(new.button, { BackgroundColor3 = COLORS.BG_HOVER }, 0.25)
-		new.accent.Visible = true
-		new.nameLabel.TextColor3 = COLORS.TEXT_PRIMARY
-	end
-	if pages[currentTab] then
-		pages[currentTab].Visible = true
-	end
-end
-
-for _, data in ipairs(navItems) do
-	local btn = create("TextButton", {
-		Name = data.label .. "Nav",
-		Size = UDim2.new(1, 0, 0, 40),
-		BackgroundColor3 = COLORS.BG_HOVER,
-		BackgroundTransparency = (data.label == currentTab) and 0 or 1,
-		BorderSizePixel = 0,
-		Text = "",
-		LayoutOrder = data.order,
-		AutoButtonColor = false,
-		Parent = sidebar,
-	})
-	addCorner(btn, 10)
-
-	local accentBar = create("Frame", {
-		Size = UDim2.new(0, 3, 0, 18),
-		Position = UDim2.new(0, 2, 0.5, -9),
-		BackgroundColor3 = COLORS.ACCENT,
-		BorderSizePixel = 0,
-		Visible = (data.label == currentTab),
-		Parent = btn,
-	})
-	addCorner(accentBar, 2)
-
-	create("TextLabel", {
-		Size = UDim2.new(0, 24, 1, 0),
-		Position = UDim2.new(0, 14, 0, 0),
-		BackgroundTransparency = 1,
-		Text = data.icon,
-		TextSize = 14,
-		Font = Enum.Font.Gotham,
-		TextColor3 = COLORS.TEXT_PRIMARY,
-		Parent = btn,
-	})
-
-	local nameLbl = create("TextLabel", {
-		Size = UDim2.new(1, -48, 1, 0),
-		Position = UDim2.new(0, 42, 0, 0),
-		BackgroundTransparency = 1,
-		Text = data.label,
-		TextSize = 13,
-		Font = Enum.Font.GothamMedium,
-		TextColor3 = (data.label == currentTab) and COLORS.TEXT_PRIMARY or COLORS.TEXT_SECONDARY,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = btn,
-	})
-
-	navButtons[data.label] = { button = btn, accent = accentBar, nameLabel = nameLbl }
-
-	-- Hover
-	btn.MouseEnter:Connect(function()
-		if data.label ~= currentTab then
-			smoothTween(btn, { BackgroundTransparency = 0.4 }, 0.2)
-		end
-	end)
-	btn.MouseLeave:Connect(function()
-		if data.label ~= currentTab then
-			smoothTween(btn, { BackgroundTransparency = 1 }, 0.2)
-		end
-	end)
-
-	-- Click to switch tab
-	btn.MouseButton1Click:Connect(function()
-		switchTab(data.label)
-	end)
-end
+createNavButton("🎥", "Camera", 1)
+createNavButton("🌤️", "Environment", 2)
+createNavButton("🌧️", "Weather", 3)
+createNavButton("🎬", "Effects", 4)
+createNavButton("👤", "Player", 5)
+createNavButton("⚙️", "Settings", 6)
 
 -- ============================================================
 -- PAGE: CAMERA
 -- ============================================================
-local cameraPage = createPage("Camera")
-createHeader(cameraPage, "Camera Controls", 0)
+local camPage = createPage("Camera")
+createHeader(camPage, "Camera Controls", 0)
 
-createSlider(cameraPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v)
-	smoothTween(camera, { FieldOfView = v }, 0.12)
+createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v)
+	smoothTween(camera, {FieldOfView = v}, 0.1)
 end)
 
-createSlider(cameraPage, "Camera Smoothness", 0, 100, 50, 2, function(v)
-	-- Adjusts camera responsiveness feel
+createSlider(camPage, "Zoom Distance", 5, 100, 20, 2, function(v)
+	player.CameraMaxZoomDistance = v
 end)
 
-createToggle(cameraPage, "Head Bobbing", false, 3, function(state)
-	-- Placeholder for head bob system
+createSlider(camPage, "Min Zoom", 0.5, 20, 0.5, 3, function(v)
+	player.CameraMinZoomDistance = v
+end)
+
+createToggle(camPage, "Shift Lock Style", false, 4, function(state)
+	player.DevEnableMouseLock = state
 end)
 
 -- ============================================================
 -- PAGE: ENVIRONMENT
 -- ============================================================
 local envPage = createPage("Environment")
-createHeader(envPage, "Lighting & Time", 0)
+createHeader(envPage, "Lighting & Atmosphere", 0)
 
 createSlider(envPage, "Time of Day", CONFIG.MIN_CLOCK, CONFIG.MAX_CLOCK, CONFIG.DEFAULT_CLOCK, 1, function(v)
-	smoothTween(Lighting, { ClockTime = v }, 0.3)
+	smoothTween(Lighting, {ClockTime = v}, 0.3)
 end)
 
 createSlider(envPage, "Ambient Light", 0, 100, 50, 2, function(v)
@@ -594,52 +571,47 @@ createSlider(envPage, "Fog Distance", 0, 100, 0, 4, function(v)
 	Lighting.FogColor = Color3.fromRGB(200, 205, 215)
 end)
 
+createSlider(envPage, "Exposure", -3, 3, 0, 5, function(v)
+	Lighting.ExposureCompensation = v
+end)
+
+createToggle(envPage, "Global Shadows", true, 6, function(state)
+	Lighting.GlobalShadows = state
+end)
+
 -- ============================================================
 -- PAGE: WEATHER
 -- ============================================================
-local weatherPage = createPage("Weather")
-createHeader(weatherPage, "Weather Effects", 0)
+local wthPage = createPage("Weather")
+createHeader(wthPage, "Weather Effects", 0)
 
--- Weather part that follows camera
 local weatherPart = Instance.new("Part")
-weatherPart.Name = "UnaibleLL_Weather"
+weatherPart.Name = "UnaibleLL_WP"
 weatherPart.Anchored = true
 weatherPart.CanCollide = false
 weatherPart.Transparency = 1
 weatherPart.Size = Vector3.new(80, 1, 80)
 weatherPart.Parent = workspace
 
--- Rain emitter
+-- Rain
 local rainEmitter = Instance.new("ParticleEmitter")
-rainEmitter.Name = "Rain"
 rainEmitter.Texture = "rbxassetid://5765221959"
 rainEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 200, 220))
-rainEmitter.Size = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.05),
-	NumberSequenceKeypoint.new(1, 0.03),
-})
+rainEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(1, 0.03)})
 rainEmitter.Lifetime = NumberRange.new(0.8, 1.5)
 rainEmitter.Rate = 0
 rainEmitter.Speed = NumberRange.new(60, 80)
 rainEmitter.SpreadAngle = Vector2.new(5, 5)
 rainEmitter.EmissionDirection = Enum.NormalId.Bottom
-rainEmitter.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.3),
-	NumberSequenceKeypoint.new(0.8, 0.3),
-	NumberSequenceKeypoint.new(1, 1),
-})
+rainEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(0.8, 0.3), NumberSequenceKeypoint.new(1, 1)})
 rainEmitter.LightEmission = 0.1
 rainEmitter.Parent = weatherPart
 
--- Snow emitter
+-- Snow
 local snowEmitter = Instance.new("ParticleEmitter")
-snowEmitter.Name = "Snow"
 snowEmitter.Texture = "rbxassetid://241685484"
 snowEmitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-snowEmitter.Size = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.15),
-	NumberSequenceKeypoint.new(1, 0.1),
-})
+snowEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 0.1)})
 snowEmitter.Lifetime = NumberRange.new(3, 6)
 snowEmitter.Rate = 0
 snowEmitter.Speed = NumberRange.new(5, 12)
@@ -647,61 +619,77 @@ snowEmitter.SpreadAngle = Vector2.new(30, 30)
 snowEmitter.EmissionDirection = Enum.NormalId.Bottom
 snowEmitter.Rotation = NumberRange.new(0, 360)
 snowEmitter.RotSpeed = NumberRange.new(-40, 40)
-snowEmitter.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.1),
-	NumberSequenceKeypoint.new(0.7, 0.1),
-	NumberSequenceKeypoint.new(1, 1),
-})
+snowEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.7, 0.1), NumberSequenceKeypoint.new(1, 1)})
 snowEmitter.LightEmission = 0.2
 snowEmitter.Parent = weatherPart
 
+-- Leaves / dust
+local dustEmitter = Instance.new("ParticleEmitter")
+dustEmitter.Texture = "rbxassetid://241685484"
+dustEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 160, 100))
+dustEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.08), NumberSequenceKeypoint.new(1, 0.06)})
+dustEmitter.Lifetime = NumberRange.new(4, 8)
+dustEmitter.Rate = 0
+dustEmitter.Speed = NumberRange.new(2, 6)
+dustEmitter.SpreadAngle = Vector2.new(60, 60)
+dustEmitter.EmissionDirection = Enum.NormalId.Left
+dustEmitter.Rotation = NumberRange.new(0, 360)
+dustEmitter.RotSpeed = NumberRange.new(-20, 20)
+dustEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.8, 0.4), NumberSequenceKeypoint.new(1, 1)})
+dustEmitter.Parent = weatherPart
+
 local rainActive = false
 local snowActive = false
+local dustActive = false
 local lightningActive = false
 
--- Move weather part above camera
 RunService.RenderStepped:Connect(function()
 	if workspace.CurrentCamera ~= camera then
 		camera = workspace.CurrentCamera
 	end
-	if rainActive or snowActive then
+	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
 end)
 
-createToggle(weatherPage, "Rain", false, 1, function(state)
+createToggle(wthPage, "Rain", false, 1, function(state)
 	rainActive = state
 	if state then
-		smoothTween(Lighting, { FogEnd = 800, FogStart = 10 }, 1)
+		smoothTween(Lighting, {FogEnd = 800, FogStart = 10}, 1)
 		Lighting.FogColor = Color3.fromRGB(140, 148, 160)
 		rainEmitter.Rate = 300
 	else
-		smoothTween(Lighting, { FogEnd = 10000, FogStart = 0 }, 1)
+		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		rainEmitter.Rate = 0
 	end
 end)
 
-createSlider(weatherPage, "Rain Intensity", 50, 800, 300, 2, function(v)
+createSlider(wthPage, "Rain Intensity", 50, 800, 300, 2, function(v)
 	if rainActive then rainEmitter.Rate = v end
 end)
 
-createToggle(weatherPage, "Snow", false, 3, function(state)
+createToggle(wthPage, "Snow", false, 3, function(state)
 	snowActive = state
 	if state then
-		smoothTween(Lighting, { FogEnd = 1200, FogStart = 20 }, 1)
+		smoothTween(Lighting, {FogEnd = 1200, FogStart = 20}, 1)
 		Lighting.FogColor = Color3.fromRGB(220, 225, 235)
 		snowEmitter.Rate = 150
 	else
-		smoothTween(Lighting, { FogEnd = 10000, FogStart = 0 }, 1)
+		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		snowEmitter.Rate = 0
 	end
 end)
 
-createSlider(weatherPage, "Snow Intensity", 30, 500, 150, 4, function(v)
+createSlider(wthPage, "Snow Intensity", 30, 500, 150, 4, function(v)
 	if snowActive then snowEmitter.Rate = v end
 end)
 
-createToggle(weatherPage, "Lightning Flashes", false, 5, function(state)
+createToggle(wthPage, "Dust / Leaves", false, 5, function(state)
+	dustActive = state
+	dustEmitter.Rate = state and 50 or 0
+end)
+
+createToggle(wthPage, "Lightning Flashes", false, 6, function(state)
 	lightningActive = state
 	if state then
 		task.spawn(function()
@@ -721,9 +709,10 @@ createToggle(weatherPage, "Lightning Flashes", false, 5, function(state)
 	end
 end)
 
-createSlider(weatherPage, "Wind Strength", 0, 50, 10, 6, function(v)
+createSlider(wthPage, "Wind Strength", 0, 50, 10, 7, function(v)
 	snowEmitter.SpreadAngle = Vector2.new(v, v)
 	rainEmitter.SpreadAngle = Vector2.new(v * 0.3, v * 0.3)
+	dustEmitter.Speed = NumberRange.new(v * 0.5, v)
 end)
 
 -- ============================================================
@@ -740,7 +729,6 @@ local letterboxTop = create("Frame", {
 	ZIndex = 100,
 	Parent = screenGui,
 })
-
 local letterboxBot = create("Frame", {
 	Size = UDim2.new(1, 0, 0, 0),
 	Position = UDim2.new(0, 0, 1, 0),
@@ -753,8 +741,8 @@ local letterboxBot = create("Frame", {
 
 createSlider(fxPage, "Cinematic Bars %", 0, 20, 0, 1, function(v)
 	local s = v / 100
-	smoothTween(letterboxTop, { Size = UDim2.new(1, 0, s, 0) }, 0.3)
-	smoothTween(letterboxBot, { Size = UDim2.new(1, 0, s, 0) }, 0.3)
+	smoothTween(letterboxTop, {Size = UDim2.new(1, 0, s, 0)}, 0.3)
+	smoothTween(letterboxBot, {Size = UDim2.new(1, 0, s, 0)}, 0.3)
 end)
 
 local blurEffect = Instance.new("BlurEffect")
@@ -762,7 +750,7 @@ blurEffect.Size = 0
 blurEffect.Parent = Lighting
 
 createSlider(fxPage, "Background Blur", 0, 24, 0, 2, function(v)
-	smoothTween(blurEffect, { Size = v }, 0.2)
+	smoothTween(blurEffect, {Size = v}, 0.2)
 end)
 
 local cc = Instance.new("ColorCorrectionEffect")
@@ -788,32 +776,116 @@ createSlider(fxPage, "Tint B", 0, 255, 255, 7, function(v)
 	cc.TintColor = Color3.fromRGB(cc.TintColor.R * 255, cc.TintColor.G * 255, v)
 end)
 
+-- Bloom
+local bloom = Instance.new("BloomEffect")
+bloom.Intensity = 0
+bloom.Size = 24
+bloom.Threshold = 1
+bloom.Parent = Lighting
+
+createSlider(fxPage, "Bloom Intensity", 0, 100, 0, 8, function(v)
+	bloom.Intensity = v / 100
+	bloom.Threshold = 1 - (v / 200)
+end)
+
+-- Sun Rays
+local sunRays = Instance.new("SunRaysEffect")
+sunRays.Intensity = 0
+sunRays.Spread = 0.5
+sunRays.Parent = Lighting
+
+createSlider(fxPage, "Sun Rays", 0, 100, 0, 9, function(v)
+	sunRays.Intensity = v / 100
+	sunRays.Spread = 0.2 + (v / 100) * 0.8
+end)
+
+-- ============================================================
+-- PAGE: PLAYER
+-- ============================================================
+local playerPage = createPage("Player")
+createHeader(playerPage, "Player Modifiers", 0)
+
+createSlider(playerPage, "Walk Speed", 16, 200, 16, 1, function(v)
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed = v end
+	end
+end)
+
+createSlider(playerPage, "Jump Power", 50, 300, 50, 2, function(v)
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.UseJumpPower = true
+			hum.JumpPower = v
+		end
+	end
+end)
+
+createSlider(playerPage, "Hip Height", 0, 10, 2, 3, function(v)
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then hum.HipHeight = v end
+	end
+end)
+
+createToggle(playerPage, "Noclip", false, 4, function(state)
+	if state then
+		RunService:BindToRenderStep("Noclip", 1, function()
+			local char = player.Character
+			if char then
+				for _, part in pairs(char:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+	else
+		RunService:UnbindFromRenderStep("Noclip")
+	end
+end)
+
+createToggle(playerPage, "Infinite Jump", false, 5, function(state)
+	if state then
+		UserInputService.JumpRequest:Connect(function()
+			local char = player.Character
+			if char then
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+			end
+		end)
+	end
+end)
+
 -- ============================================================
 -- PAGE: SETTINGS
 -- ============================================================
-local settingsPage = createPage("Settings")
-createHeader(settingsPage, "General", 0)
+local setPage = createPage("Settings")
+createHeader(setPage, "UI Settings", 0)
 
--- GUI Transparency
-createSlider(settingsPage, "GUI Transparency %", 0, 80, 0, 1, function(v)
+createSlider(setPage, "GUI Transparency %", 0, 80, 0, 1, function(v)
 	local t = v / 100
 	mainFrame.BackgroundTransparency = t
 	topBar.BackgroundTransparency = t
-	sidebar.BackgroundTransparency = t
+	sidebarFrame.BackgroundTransparency = t
 	contentArea.BackgroundTransparency = t
 end)
 
--- Movable FPS Counter
+-- Movable FPS counter
 local fpsLabel = nil
 local fpsDragging = false
 local fpsDragStart = nil
 local fpsStartPos = nil
 
-createToggle(settingsPage, "FPS Counter (draggable)", false, 2, function(state)
+createToggle(setPage, "FPS Counter (drag to move)", false, 2, function(state)
 	if state then
 		if not fpsLabel then
 			fpsLabel = create("TextLabel", {
-				Name = "FPSCounter",
+				Name = "FPS",
 				Size = UDim2.new(0, 90, 0, 30),
 				Position = UDim2.new(1, -100, 0, 10),
 				BackgroundColor3 = COLORS.BG_CARD,
@@ -836,24 +908,21 @@ createToggle(settingsPage, "FPS Counter (draggable)", false, 2, function(state)
 					fpsStartPos = fpsLabel.Position
 				end
 			end)
-
 			fpsLabel.InputEnded:Connect(function(input)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					fpsDragging = false
 				end
 			end)
 
-			local frameCount = 0
-			local lastTime = tick()
+			local fc = 0
+			local lt = tick()
 			RunService.RenderStepped:Connect(function()
 				if not fpsLabel or not fpsLabel.Parent then return end
-				frameCount = frameCount + 1
-				if tick() - lastTime >= 1 then
-					if fpsLabel.Visible then
-						fpsLabel.Text = tostring(frameCount) .. " FPS"
-					end
-					frameCount = 0
-					lastTime = tick()
+				fc = fc + 1
+				if tick() - lt >= 1 then
+					if fpsLabel.Visible then fpsLabel.Text = fc .. " FPS" end
+					fc = 0
+					lt = tick()
 				end
 			end)
 		end
@@ -863,22 +932,51 @@ createToggle(settingsPage, "FPS Counter (draggable)", false, 2, function(state)
 	end
 end)
 
--- FPS drag handling
+-- FPS drag
 UserInputService.InputChanged:Connect(function(input)
 	if fpsDragging and fpsLabel then
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			local delta = input.Position - fpsDragStart
-			fpsLabel.Position = UDim2.new(
-				fpsStartPos.X.Scale, fpsStartPos.X.Offset + delta.X,
-				fpsStartPos.Y.Scale, fpsStartPos.Y.Offset + delta.Y
-			)
+			fpsLabel.Position = UDim2.new(fpsStartPos.X.Scale, fpsStartPos.X.Offset + delta.X, fpsStartPos.Y.Scale, fpsStartPos.Y.Offset + delta.Y)
 		end
 	end
 end)
-
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		fpsDragging = false
+	end
+end)
+
+createToggle(setPage, "Show Coordinates", false, 3, function(state)
+	local existing = screenGui:FindFirstChild("CoordsLabel")
+	if state then
+		if not existing then
+			local coordLbl = create("TextLabel", {
+				Name = "CoordsLabel",
+				Size = UDim2.new(0, 200, 0, 24),
+				Position = UDim2.new(0, 10, 1, -34),
+				BackgroundColor3 = COLORS.BG_CARD,
+				BackgroundTransparency = 0.2,
+				Text = "X: 0  Y: 0  Z: 0",
+				TextColor3 = COLORS.TEXT_PRIMARY,
+				TextSize = 11,
+				Font = Enum.Font.GothamMedium,
+				ZIndex = 200,
+				Parent = screenGui,
+			})
+			addCorner(coordLbl, 6)
+			RunService.RenderStepped:Connect(function()
+				if coordLbl and coordLbl.Parent and coordLbl.Visible then
+					local char = player.Character
+					if char and char:FindFirstChild("HumanoidRootPart") then
+						local pos = char.HumanoidRootPart.Position
+						coordLbl.Text = string.format("X: %.0f  Y: %.0f  Z: %.0f", pos.X, pos.Y, pos.Z)
+					end
+				end
+			end)
+		end
+	else
+		if existing then existing:Destroy() end
 	end
 end)
 
@@ -894,16 +992,16 @@ local resetBtn = create("TextButton", {
 	Font = Enum.Font.GothamBold,
 	LayoutOrder = 10,
 	AutoButtonColor = false,
-	Parent = settingsPage,
+	Parent = setPage,
 })
 addCorner(resetBtn, 10)
 addStroke(resetBtn, COLORS.DANGER, 1, 0.6)
 
 resetBtn.MouseEnter:Connect(function()
-	smoothTween(resetBtn, { BackgroundTransparency = 0.6 }, 0.2)
+	smoothTween(resetBtn, {BackgroundTransparency = 0.6}, 0.2)
 end)
 resetBtn.MouseLeave:Connect(function()
-	smoothTween(resetBtn, { BackgroundTransparency = 0.85 }, 0.2)
+	smoothTween(resetBtn, {BackgroundTransparency = 0.85}, 0.2)
 end)
 
 resetBtn.MouseButton1Click:Connect(function()
@@ -913,25 +1011,30 @@ resetBtn.MouseButton1Click:Connect(function()
 	Lighting.FogEnd = 10000
 	Lighting.FogStart = 0
 	Lighting.Brightness = 2
+	Lighting.ExposureCompensation = 0
 	blurEffect.Size = 0
 	cc.Saturation = 0
 	cc.Contrast = 0
 	cc.TintColor = Color3.fromRGB(255, 255, 255)
+	bloom.Intensity = 0
+	sunRays.Intensity = 0
 	letterboxTop.Size = UDim2.new(1, 0, 0, 0)
 	letterboxBot.Size = UDim2.new(1, 0, 0, 0)
 	rainEmitter.Rate = 0
 	snowEmitter.Rate = 0
+	dustEmitter.Rate = 0
 	rainActive = false
 	snowActive = false
+	dustActive = false
 	lightningActive = false
 	mainFrame.BackgroundTransparency = 0
 	topBar.BackgroundTransparency = 0
-	sidebar.BackgroundTransparency = 0
+	sidebarFrame.BackgroundTransparency = 0
 	contentArea.BackgroundTransparency = 0
 end)
 
 -- ============================================================
--- WINDOW DRAGGING (top bar)
+-- WINDOW DRAGGING
 -- ============================================================
 local dragging = false
 local dragStart, startPos
@@ -943,57 +1046,52 @@ topBar.InputBegan:Connect(function(input)
 		startPos = mainFrame.Position
 	end
 end)
-
 topBar.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = false
 	end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
 	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - dragStart
-		mainFrame.Position = UDim2.new(
-			startPos.X.Scale, startPos.X.Offset + delta.X,
-			startPos.Y.Scale, startPos.Y.Offset + delta.Y
-		)
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 	end
 end)
 
 -- ============================================================
--- F1 TOGGLE (open/close with smooth animation)
+-- F1 TOGGLE + OPEN ANIMATION ON START
 -- ============================================================
 local guiOpen = false
+local FULL_SIZE = UDim2.new(0, 700, 0, 480)
+local FULL_POS = UDim2.new(0.5, -350, 0.5, -240)
 
-local function toggleGui()
-	guiOpen = not guiOpen
-	if guiOpen then
-		mainFrame.Visible = true
-		mainFrame.Size = UDim2.new(0, 0, 0, 0)
-		mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-		smoothTween(mainFrame, {
-			Size = UDim2.new(0, 700, 0, 480),
-			Position = UDim2.new(0.5, -350, 0.5, -240),
-		}, 0.45)
-	else
-		smoothTween(mainFrame, {
-			Size = UDim2.new(0, 0, 0, 0),
-			Position = UDim2.new(0.5, 0, 0.5, 0),
-		}, 0.35)
-		task.delay(0.4, function()
-			if not guiOpen then
-				mainFrame.Visible = false
-			end
-		end)
-	end
+local function openGui()
+	guiOpen = true
+	mainFrame.Visible = true
+	mainFrame.Size = UDim2.new(0, 0, 0, 0)
+	mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	smoothTween(mainFrame, {Size = FULL_SIZE, Position = FULL_POS}, 0.5)
+end
+
+local function closeGui()
+	guiOpen = false
+	smoothTween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.35)
+	task.delay(0.4, function()
+		if not guiOpen then mainFrame.Visible = false end
+	end)
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.F1 then
-		toggleGui()
+		if guiOpen then closeGui() else openGui() end
 	end
 end)
+
+-- Set default tab and open GUI on load
+switchToTab("Camera")
+task.wait(0.5)
+openGui()
 
 -- Apply defaults
 camera.FieldOfView = CONFIG.DEFAULT_FOV
