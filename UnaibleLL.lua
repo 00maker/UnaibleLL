@@ -1,6 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v7
--- Named configs | Autoload | Keybinds | Functions HUD | Anti-Reset
+-- UnaibleLL - Client Visual Customization Suite v8
+-- Named configs | Autoload | Keybinds | Functions HUD
+-- Always-on WalkSpeed + Gravity lock | Capture-FOV lock
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -19,26 +20,25 @@ local camera = workspace.CurrentCamera
 local lockedFOV = 70
 local fovLockEnabled = true
 
--- Player enforcement state (anti-reset bypass + gravity lock)
+-- Player enforcement state (always-on walkspeed + gravity lock)
 local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
 local speedBypass = false
-local gravityLock = false
 
 -- ============================================================
 -- STATE: config store, keybinds, control registry
 -- ============================================================
 local STORE_FILE = "UnaibleLL_Store.json"
-local Store = { autoload = nil, configs = {} }  -- persisted
-local Config = {}                                -- live flag -> value
-local keybinds = {}                              -- toggle name -> Enum.KeyCode
-local toggleList = {}                            -- ordered toggle handles
-local toggleByName = {}                          -- name -> handle
-local controlAppliers = {}                       -- flag -> function(value)
+local Store = { autoload = nil, configs = {} }
+local Config = {}
+local keybinds = {}
+local toggleList = {}
+local toggleByName = {}
+local controlAppliers = {}
 local bindListening = nil
-local updateHUD                                  -- forward decl
-local refreshConfigList                          -- forward decl
+local updateHUD
+local refreshConfigList
 
 -- ============================================================
 -- FILE HELPERS
@@ -279,7 +279,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 158, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v7",
+	Text = "v8",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -570,7 +570,6 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	if flag then
 		controlAppliers[flag] = function(v) setValue(v, true) end
 	end
-	-- apply loaded value on creation
 	if flag and Config[flag] ~= nil and callback then pcall(callback, initial) end
 	return container
 end
@@ -660,9 +659,7 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 		Text = "",
 		Parent = container,
 	})
-	btn.MouseButton1Click:Connect(function()
-		handle.setState(not state, true)
-	end)
+	btn.MouseButton1Click:Connect(function() handle.setState(not state, true) end)
 	bindBtn.MouseButton1Click:Connect(function()
 		bindListening = handle
 		bindBtn.Text = "..."
@@ -887,7 +884,13 @@ createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DE
 createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v) player.CameraMaxZoomDistance = v end, "maxZoom")
 createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v) player.CameraMinZoomDistance = v end, "minZoom")
 createToggle(camPage, "Shift Lock Enabled", false, 4, function(state) player.DevEnableMouseLock = state end, "shiftLock")
-createToggle(camPage, "Lock FOV", true, 5, function(state) fovLockEnabled = state end, "fovLock")
+-- Lock FOV captures whatever FOV is currently in use when enabled
+createToggle(camPage, "Lock FOV", true, 5, function(state)
+	fovLockEnabled = state
+	if state then
+		lockedFOV = camera.FieldOfView
+	end
+end, "fovLock")
 createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
 	if state then
 		camera.CameraType = Enum.CameraType.Scriptable
@@ -1129,7 +1132,7 @@ local function getHumanoid()
 	if char then return char:FindFirstChildOfClass("Humanoid") end
 	return nil
 end
-createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
+createSlider(playerPage, "Walk Speed (always locked)", 16, 500, 16, 1, function(v)
 	targetWalkSpeed = v
 	local hum = getHumanoid()
 	if hum then hum.WalkSpeed = v end
@@ -1139,16 +1142,12 @@ createSlider(playerPage, "Jump Power", 50, 500, 50, 2, function(v)
 	local hum = getHumanoid()
 	if hum then hum.UseJumpPower = true; hum.JumpPower = v end
 end, "jumppower")
-createSlider(playerPage, "Gravity", 0, 400, 196, 3, function(v)
+createSlider(playerPage, "Gravity (always locked)", 0, 400, 196, 3, function(v)
 	targetGravity = v
 	workspace.Gravity = v
 end, "gravity")
-createToggle(playerPage, "Anti-Reset Bypass (speed/jump)", false, 4, function(state) speedBypass = state end, "speedBypass")
-createToggle(playerPage, "Lock Gravity", false, 5, function(state)
-	gravityLock = state
-	if state then workspace.Gravity = targetGravity end
-end, "gravityLock")
-createToggle(playerPage, "Noclip", false, 6, function(state)
+createToggle(playerPage, "Anti-Reset Bypass (jump)", false, 4, function(state) speedBypass = state end, "speedBypass")
+createToggle(playerPage, "Noclip", false, 5, function(state)
 	if state then
 		RunService:BindToRenderStep("Noclip", 1, function()
 			local char = player.Character
@@ -1162,7 +1161,7 @@ createToggle(playerPage, "Noclip", false, 6, function(state)
 		RunService:UnbindFromRenderStep("Noclip")
 	end
 end, "noclip")
-createToggle(playerPage, "Infinite Jump", false, 7, function(state)
+createToggle(playerPage, "Infinite Jump", false, 6, function(state)
 	if state and not _G.UnaibleLL_InfJump then
 		_G.UnaibleLL_InfJump = true
 		UserInputService.JumpRequest:Connect(function()
@@ -1174,7 +1173,7 @@ createToggle(playerPage, "Infinite Jump", false, 7, function(state)
 		end)
 	end
 end, "infjump")
-createButton(playerPage, "Reset Character 🔄", 8, COLORS.DANGER, function()
+createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	local char = player.Character
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
@@ -1187,27 +1186,22 @@ player.CharacterAdded:Connect(function(char)
 		hum.UseJumpPower = true
 		hum.JumpPower = targetJumpPower
 	end
-	if gravityLock then workspace.Gravity = targetGravity end
+	workspace.Gravity = targetGravity
 end)
 
 -- ============================================================
--- PAGE: CONFIGS (named save/load/autoload)
+-- PAGE: CONFIGS
 -- ============================================================
 local cfgPage = createPage("Configs")
 createHeader(cfgPage, "Save / Load Configs", 0)
-
 local nameBox = createInput(cfgPage, "Config Name", "Enter a name for this config", 1, nil)
-
 createButton(cfgPage, "💾 Save As New Config", 2, COLORS.ACCENT_GREEN, function()
 	local name = nameBox.Text
 	if name and name ~= "" then
 		if saveConfigAs(name) then nameBox.Text = "" end
 	end
 end)
-
 createHeader(cfgPage, "Saved Configs", 3)
-
--- container for the config list rows
 local configListHolder = create("Frame", {
 	Size = UDim2.new(1, 0, 0, 10),
 	BackgroundTransparency = 1,
@@ -1246,7 +1240,6 @@ refreshConfigList = function()
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Parent = row,
 		})
-		-- Load
 		local loadBtn = create("TextButton", {
 			Size = UDim2.new(0, 54, 0, 26),
 			Position = UDim2.new(1, -184, 0.5, -13),
@@ -1261,7 +1254,6 @@ refreshConfigList = function()
 		})
 		addCorner(loadBtn, 6)
 		loadBtn.MouseButton1Click:Connect(function() loadConfigNamed(name) end)
-		-- Autoload
 		local autoBtn = create("TextButton", {
 			Size = UDim2.new(0, 74, 0, 26),
 			Position = UDim2.new(1, -124, 0.5, -13),
@@ -1276,7 +1268,6 @@ refreshConfigList = function()
 		})
 		addCorner(autoBtn, 6)
 		autoBtn.MouseButton1Click:Connect(function() setAutoload(name) end)
-		-- Delete
 		local delBtn = create("TextButton", {
 			Size = UDim2.new(0, 40, 0, 26),
 			Position = UDim2.new(1, -46, 0.5, -13),
@@ -1469,18 +1460,20 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Physics loop: anti-reset for speed/jump + gravity lock
+-- Physics loop: WalkSpeed + Gravity are ALWAYS locked (no toggle)
 RunService.Heartbeat:Connect(function()
 	local hum = getHumanoid()
 	if hum then
+		-- WalkSpeed always hard-locked to the chosen value
+		hum.WalkSpeed = targetWalkSpeed
+		-- Jump uses the smooth ramp only when Anti-Reset Bypass is on
 		if speedBypass then
-			-- ramp smoothly to reduce sudden-change detection
-			hum.WalkSpeed = approach(hum.WalkSpeed, targetWalkSpeed, 4)
 			hum.UseJumpPower = true
 			hum.JumpPower = approach(hum.JumpPower, targetJumpPower, 6)
 		end
 	end
-	if gravityLock and workspace.Gravity ~= targetGravity then
+	-- Gravity always locked to the chosen value
+	if workspace.Gravity ~= targetGravity then
 		workspace.Gravity = targetGravity
 	end
 end)
@@ -1518,7 +1511,6 @@ switchToTab("Camera")
 refreshConfigList()
 updateHUD()
 
--- Apply autoload config (after UI built so appliers exist)
 if Store.autoload and Store.configs[Store.autoload] then
 	task.defer(function() applySnapshot(Store.configs[Store.autoload]) end)
 end
