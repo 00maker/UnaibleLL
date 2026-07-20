@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v9
+-- UnaibleLL - Client Visual Customization Suite v10
 -- Named configs | Autoload | Keybinds | Functions HUD
--- Bindable WalkSpeed/Jump | Unbindable weather | Polished UI
+-- Always-on WalkSpeed + Gravity lock | Polished UI
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -24,8 +24,7 @@ local fovLockEnabled = true
 local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
-local walkSpeedLock = true   -- toggled by bindable "Walk Speed Lock"
-local jumpLock = false       -- toggled by bindable "Jump Lock"
+local jumpLock = false   -- toggled by bindable "Jump Lock"
 
 -- ============================================================
 -- STATE: config store, keybinds, control registry
@@ -175,12 +174,6 @@ local function addPadding(p, t, b, l, r)
 end
 local function addGradient(p, c1, c2, rot) return create("UIGradient", {Color = ColorSequence.new(c1, c2), Rotation = rot or 0, Parent = p}) end
 
-local function approach(current, target, step)
-	if current < target then return math.min(current + step, target)
-	elseif current > target then return math.max(current - step, target)
-	else return target end
-end
-
 -- ============================================================
 -- SCREEN GUI
 -- ============================================================
@@ -281,7 +274,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 158, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v9",
+	Text = "v10",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -493,7 +486,6 @@ local function createHeader(parent, text, order)
 	})
 end
 
--- card hover helper
 local function hoverCard(container, stroke)
 	container.MouseEnter:Connect(function() smoothTween(stroke, {Transparency = 0.1, Color = COLORS.ACCENT}, 0.2) end)
 	container.MouseLeave:Connect(function() smoothTween(stroke, {Transparency = 0.5, Color = COLORS.BORDER}, 0.2) end)
@@ -911,7 +903,6 @@ updateHUD = function()
 		end
 	end
 	if idx == 0 then
-		create("Frame", {Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 1, Parent = hudListF})
 		create("TextLabel", {
 			Size = UDim2.new(1, -8, 0, 40),
 			Position = UDim2.new(0, 4, 0, 0),
@@ -1194,20 +1185,19 @@ end
 createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
 	targetWalkSpeed = v
 	local hum = getHumanoid()
-	if hum and walkSpeedLock then hum.WalkSpeed = v end
+	if hum then hum.WalkSpeed = v end
 end, "walkspeed")
-createToggle(playerPage, "Walk Speed Lock", true, 2, function(state) walkSpeedLock = state end, "walkLock")
-createSlider(playerPage, "Jump Power", 50, 500, 50, 3, function(v)
+createSlider(playerPage, "Jump Power", 50, 500, 50, 2, function(v)
 	targetJumpPower = v
 	local hum = getHumanoid()
 	if hum and jumpLock then hum.UseJumpPower = true; hum.JumpPower = v end
 end, "jumppower")
-createToggle(playerPage, "Jump Lock", false, 4, function(state) jumpLock = state end, "jumpLockFlag")
-createSlider(playerPage, "Gravity", 0, 400, 196, 5, function(v)
+createToggle(playerPage, "Jump Lock", false, 3, function(state) jumpLock = state end, "jumpLockFlag")
+createSlider(playerPage, "Gravity", 0, 400, 196, 4, function(v)
 	targetGravity = v
 	workspace.Gravity = v
 end, "gravity")
-createToggle(playerPage, "Noclip", false, 6, function(state)
+createToggle(playerPage, "Noclip", false, 5, function(state)
 	if state then
 		RunService:BindToRenderStep("Noclip", 1, function()
 			local char = player.Character
@@ -1221,7 +1211,7 @@ createToggle(playerPage, "Noclip", false, 6, function(state)
 		RunService:UnbindFromRenderStep("Noclip")
 	end
 end, "noclip")
-createToggle(playerPage, "Infinite Jump", false, 7, function(state)
+createToggle(playerPage, "Infinite Jump", false, 6, function(state)
 	if state and not _G.UnaibleLL_InfJump then
 		_G.UnaibleLL_InfJump = true
 		UserInputService.JumpRequest:Connect(function()
@@ -1233,7 +1223,7 @@ createToggle(playerPage, "Infinite Jump", false, 7, function(state)
 		end)
 	end
 end, "infjump")
-createButton(playerPage, "Reset Character 🔄", 8, COLORS.DANGER, function()
+createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	local char = player.Character
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
@@ -1242,7 +1232,7 @@ end)
 player.CharacterAdded:Connect(function(char)
 	local hum = char:WaitForChild("Humanoid", 5)
 	if hum then
-		if walkSpeedLock then hum.WalkSpeed = targetWalkSpeed end
+		hum.WalkSpeed = targetWalkSpeed
 		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
 	workspace.Gravity = targetGravity
@@ -1518,10 +1508,11 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
+-- WalkSpeed + Gravity always locked; Jump locked only when Jump Lock is on
 RunService.Heartbeat:Connect(function()
 	local hum = getHumanoid()
 	if hum then
-		if walkSpeedLock then hum.WalkSpeed = targetWalkSpeed end
+		hum.WalkSpeed = targetWalkSpeed
 		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
 	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
