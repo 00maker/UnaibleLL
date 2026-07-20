@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v11
+-- UnaibleLL - Client Visual Customization Suite v12
 -- Configs | Keybinds | HUD | Search | Server info | Player list
--- Waypoints | Tracers | Chams | Always-on WalkSpeed/Gravity lock
+-- Waypoints | Tracers | Chams | Tweened teleport (anti-cheat friendly)
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -27,12 +27,13 @@ local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
 local jumpLock = false
+local tpSpeed = 80
 
 -- Visuals state
 local tracersEnabled = false
 local chamsEnabled = false
-local tracerObjects = {}   -- player -> {line drawing/frame}
-local chamObjects = {}     -- player -> Highlight
+local tracerObjects = {}
+local chamObjects = {}
 
 -- ============================================================
 -- STATE: config store, keybinds, control registry, search
@@ -289,7 +290,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 150, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v11",
+	Text = "v12",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -1271,7 +1272,7 @@ end
 player.CharacterAdded:Connect(function() currentTrack = nil end)
 
 -- ============================================================
--- PAGE: PLAYER (with waypoints)
+-- PAGE: PLAYER (with waypoints + tweened teleport)
 -- ============================================================
 local playerPage = createPage("Player")
 createHeader(playerPage, "Player Modifiers", 0)
@@ -1284,9 +1285,18 @@ local function getHRP(char)
 	char = char or player.Character
 	return char and char:FindFirstChild("HumanoidRootPart")
 end
-local function teleportTo(cframe)
+-- Tweened teleport: snaps short hops, glides long ones to dodge speed checks
+local function teleportTo(targetCFrame)
 	local hrp = getHRP()
-	if hrp then hrp.CFrame = cframe end
+	if not hrp then return end
+	local dist = (targetCFrame.Position - hrp.Position).Magnitude
+	if dist < 30 then
+		hrp.CFrame = targetCFrame
+		return
+	end
+	local duration = math.clamp(dist / tpSpeed, 0.1, 8)
+	local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+	tween:Play()
 end
 
 createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
@@ -1334,10 +1344,13 @@ createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	local char = player.Character
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
+createSlider(playerPage, "Teleport Speed", 20, 300, 80, 12, function(v)
+	tpSpeed = v
+end, "tpSpeed")
 
-createHeader(playerPage, "Waypoints", 8)
-local wpNameBox = createInput(playerPage, "Waypoint Name", "Name this spot, then Save", 9, nil)
-createButton(playerPage, "📍 Save Current Position", 10, COLORS.ACCENT_GREEN, function()
+createHeader(playerPage, "Waypoints", 13)
+local wpNameBox = createInput(playerPage, "Waypoint Name", "Name this spot, then Save", 14, nil)
+createButton(playerPage, "📍 Save Current Position", 15, COLORS.ACCENT_GREEN, function()
 	local hrp = getHRP()
 	if hrp and wpNameBox.Text ~= "" then
 		local p = hrp.Position
@@ -1351,7 +1364,7 @@ local wpHolder = create("Frame", {
 	Size = UDim2.new(1, 0, 0, 10),
 	BackgroundTransparency = 1,
 	AutomaticSize = Enum.AutomaticSize.Y,
-	LayoutOrder = 11,
+	LayoutOrder = 16,
 	Parent = playerPage,
 })
 create("UIListLayout", {SortOrder = Enum.SortOrder.Name, Padding = UDim.new(0, 6), Parent = wpHolder})
@@ -1512,7 +1525,6 @@ createSlider(visPage, "ESP Color (Hue)", 0, 360, 220, 3, function(v)
 end, "espHue")
 createToggle(visPage, "Team Check (skip same team)", false, 4, function() end, "teamCheck")
 
--- Cleanup on leave / rebuild on respawn
 Players.PlayerRemoving:Connect(function(plr)
 	removeTracer(plr)
 	removeCham(plr)
@@ -1602,19 +1614,14 @@ task.spawn(function()
 		end
 	end)
 	while true do
-		-- Ping
 		local okPing, ping = pcall(function()
 			return math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
 		end)
 		pingVal.Text = okPing and (ping .. " ms") or "N/A"
-		-- Players
 		playersVal.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
-		-- FPS
 		fpsVal.Text = tostring(fpsShown)
-		-- Session time
 		local secs = math.floor(tick() - sessionStart)
 		ageVal.Text = string.format("%02d:%02d:%02d", math.floor(secs/3600), math.floor((secs%3600)/60), secs%60)
-		-- Job id
 		jobVal.Text = (game.JobId ~= "" and game.JobId:sub(1, 18) .. "...") or "Studio"
 		jobVal.TextSize = 12
 		task.wait(1)
@@ -1982,7 +1989,6 @@ RunService.RenderStepped:Connect(function()
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
-	-- Tracers
 	if tracersEnabled then
 		local teamCheck = toggleByName["Team Check (skip same team)"] and toggleByName["Team Check (skip same team)"].getState()
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -2013,7 +2019,6 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
-	-- Rebuild chams if a target respawned without one
 	if chamsEnabled then
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= player and plr.Character and not chamObjects[plr] then
@@ -2032,7 +2037,6 @@ RunService.Heartbeat:Connect(function()
 	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
 end)
 
--- Keep spectate camera valid
 RunService.RenderStepped:Connect(function()
 	if spectating then
 		if not spectating.Parent or not spectating.Character then stopSpectate() end
