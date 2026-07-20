@@ -1,6 +1,6 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v5
--- Polished white UI | F1 toggle | Emotes | FOV Lock
+-- UnaibleLL - Client Visual Customization Suite v6
+-- UI | F1 toggle | Emotes | FOV Lock | Config Save | Keybinds | Functions HUD
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -9,14 +9,69 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
--- FOV lock state (enforced every frame so the game can't override it)
+-- FOV lock state
 local lockedFOV = 70
 local fovLockEnabled = true
+
+-- ============================================================
+-- CONFIG / KEYBIND / REGISTRY STATE
+-- ============================================================
+local CONFIG_FILE = "UnaibleLL_Config.json"
+local Config = {}                 -- flag -> saved value
+local keybinds = {}               -- toggle name -> Enum.KeyCode
+local toggleList = {}             -- ordered list of toggle handles
+local toggleByName = {}           -- name -> handle
+local bindListening = nil         -- handle currently awaiting a key
+local updateHUD                   -- forward declaration
+
+-- ============================================================
+-- CONFIG SAVE / LOAD
+-- ============================================================
+local function canUseFiles()
+	return (writefile ~= nil) and (readfile ~= nil) and (isfile ~= nil)
+end
+
+local function saveConfig()
+	-- serialize keybinds by name
+	Config.keybinds = {}
+	for name, key in pairs(keybinds) do
+		Config.keybinds[name] = key.Name
+	end
+	if not canUseFiles() then return false end
+	local ok, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
+	if ok and encoded then
+		pcall(function() writefile(CONFIG_FILE, encoded) end)
+		return true
+	end
+	return false
+end
+
+local function loadConfig()
+	if not canUseFiles() then return end
+	local okExists = pcall(function() return isfile(CONFIG_FILE) end)
+	if not okExists or not isfile(CONFIG_FILE) then return end
+	local ok, content = pcall(function() return readfile(CONFIG_FILE) end)
+	if not ok or not content then return end
+	local ok2, decoded = pcall(function() return HttpService:JSONDecode(content) end)
+	if ok2 and type(decoded) == "table" then
+		Config = decoded
+		if Config.keybinds then
+			for name, keyName in pairs(Config.keybinds) do
+				local okKey, kc = pcall(function() return Enum.KeyCode[keyName] end)
+				if okKey and kc then keybinds[name] = kc end
+			end
+		end
+	end
+end
+
+-- Load before building UI so saved values apply on creation
+loadConfig()
 
 -- ============================================================
 -- COLORS
@@ -75,11 +130,7 @@ local function addPadding(p, t, b, l, r)
 end
 
 local function addGradient(p, c1, c2, rot)
-	return create("UIGradient", {
-		Color = ColorSequence.new(c1, c2),
-		Rotation = rot or 0,
-		Parent = p,
-	})
+	return create("UIGradient", {Color = ColorSequence.new(c1, c2), Rotation = rot or 0, Parent = p})
 end
 
 -- ============================================================
@@ -187,7 +238,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 158, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v5",
+	Text = "v6",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -290,9 +341,7 @@ end
 
 local function switchToTab(name)
 	if activeTab == name then return end
-	for _, page in pairs(allPages) do
-		page.Visible = false
-	end
+	for _, page in pairs(allPages) do page.Visible = false end
 	for _, info in pairs(allNavBtns) do
 		info.accent.Visible = false
 		info.label.TextColor3 = COLORS.TEXT_SECONDARY
@@ -328,7 +377,6 @@ local function createNavButton(icon, name, order)
 		Parent = sidebarInner,
 	})
 	addCorner(btn, 10)
-
 	local accent = create("Frame", {
 		Size = UDim2.new(0, 3, 0, 18),
 		Position = UDim2.new(0, 2, 0.5, -9),
@@ -338,7 +386,6 @@ local function createNavButton(icon, name, order)
 		Parent = btn,
 	})
 	addCorner(accent, 2)
-
 	local iconLbl = create("TextLabel", {
 		Size = UDim2.new(0, 24, 1, 0),
 		Position = UDim2.new(0, 14, 0, 0),
@@ -349,7 +396,6 @@ local function createNavButton(icon, name, order)
 		TextColor3 = COLORS.TEXT_SECONDARY,
 		Parent = btn,
 	})
-
 	local lbl = create("TextLabel", {
 		Size = UDim2.new(1, -48, 1, 0),
 		Position = UDim2.new(0, 42, 0, 0),
@@ -361,9 +407,7 @@ local function createNavButton(icon, name, order)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = btn,
 	})
-
 	allNavBtns[name] = {btn = btn, accent = accent, label = lbl, icon = iconLbl}
-
 	btn.MouseEnter:Connect(function()
 		if activeTab ~= name then smoothTween(btn, {BackgroundTransparency = 0.5}, 0.15) end
 	end)
@@ -390,7 +434,12 @@ local function createHeader(parent, text, order)
 	})
 end
 
-local function createSlider(parent, label, min, max, default, layoutOrder, callback)
+-- Slider: accepts optional flag (last arg) for config persistence
+local function createSlider(parent, label, min, max, default, layoutOrder, callback, flag)
+	-- resolve initial value from saved config if present
+	local initial = default
+	if flag and Config[flag] ~= nil then initial = Config[flag] end
+
 	local container = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 64),
 		BackgroundColor3 = COLORS.BG_CARD,
@@ -412,19 +461,17 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = container,
 	})
-
 	local valueLbl = create("TextLabel", {
 		Size = UDim2.new(0.35, 0, 0, 22),
 		Position = UDim2.new(0.62, 0, 0, 8),
 		BackgroundTransparency = 1,
-		Text = tostring(default),
+		Text = tostring(initial),
 		TextColor3 = COLORS.ACCENT,
 		TextSize = 12,
 		Font = Enum.Font.GothamBold,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = container,
 	})
-
 	local track = create("Frame", {
 		Size = UDim2.new(1, -32, 0, 6),
 		Position = UDim2.new(0, 16, 0, 44),
@@ -433,8 +480,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		Parent = container,
 	})
 	addCorner(track, 3)
-
-	local initFill = math.clamp((default - min) / (max - min), 0, 1)
+	local initFill = math.clamp((initial - min) / (max - min), 0, 1)
 	local fill = create("Frame", {
 		Size = UDim2.new(initFill, 0, 1, 0),
 		BackgroundColor3 = COLORS.ACCENT,
@@ -443,7 +489,6 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	})
 	addCorner(fill, 3)
 	addGradient(fill, COLORS.ACCENT, COLORS.ACCENT_2, 0)
-
 	local knob = create("Frame", {
 		Size = UDim2.new(0, 16, 0, 16),
 		Position = UDim2.new(initFill, -8, 0.5, -8),
@@ -470,6 +515,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		smoothTween(fill, {Size = UDim2.new(dr, 0, 1, 0)}, 0.05)
 		smoothTween(knob, {Position = UDim2.new(dr, -8, 0.5, -8)}, 0.05)
 		valueLbl.Text = tostring(val)
+		if flag then Config[flag] = val end
 		if callback then callback(val) end
 	end
 
@@ -491,13 +537,24 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 	end)
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if isDragging then saveConfig() end
 			isDragging = false
 		end
 	end)
+
+	-- apply loaded value immediately so effect takes hold
+	if flag and Config[flag] ~= nil and callback then
+		pcall(callback, initial)
+	end
 	return container
 end
 
-local function createToggle(parent, label, default, layoutOrder, callback)
+-- Toggle: accepts optional flag and bindable(default true)
+local function createToggle(parent, label, default, layoutOrder, callback, flag, bindable)
+	if bindable == nil then bindable = true end
+	local initial = default
+	if flag and Config[flag] ~= nil then initial = Config[flag] end
+
 	local container = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 46),
 		BackgroundColor3 = COLORS.BG_CARD,
@@ -509,7 +566,7 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 	addStroke(container, COLORS.BORDER, 1, 0.5)
 
 	create("TextLabel", {
-		Size = UDim2.new(0.7, 0, 1, 0),
+		Size = UDim2.new(1, -130, 1, 0),
 		Position = UDim2.new(0, 16, 0, 0),
 		BackgroundTransparency = 1,
 		Text = label,
@@ -520,38 +577,90 @@ local function createToggle(parent, label, default, layoutOrder, callback)
 		Parent = container,
 	})
 
+	-- Bind button
+	local bindBtn = create("TextButton", {
+		Size = UDim2.new(0, 46, 0, 26),
+		Position = UDim2.new(1, -112, 0.5, -13),
+		BackgroundColor3 = COLORS.BG_CONTENT,
+		BorderSizePixel = 0,
+		Text = "＋",
+		TextColor3 = COLORS.TEXT_SECONDARY,
+		TextSize = 11,
+		Font = Enum.Font.GothamBold,
+		AutoButtonColor = false,
+		Visible = bindable,
+		Parent = container,
+	})
+	addCorner(bindBtn, 6)
+	addStroke(bindBtn, COLORS.BORDER, 1, 0.5)
+
 	local toggleBg = create("Frame", {
 		Size = UDim2.new(0, 42, 0, 24),
 		Position = UDim2.new(1, -58, 0.5, -12),
-		BackgroundColor3 = default and COLORS.ACCENT_GREEN or COLORS.BG_TRACK,
+		BackgroundColor3 = initial and COLORS.ACCENT_GREEN or COLORS.BG_TRACK,
 		BorderSizePixel = 0,
 		Parent = container,
 	})
 	addCorner(toggleBg, 12)
-
 	local toggleKnob = create("Frame", {
 		Size = UDim2.new(0, 18, 0, 18),
-		Position = default and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9),
+		Position = initial and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BorderSizePixel = 0,
 		Parent = toggleBg,
 	})
 	addCorner(toggleKnob, 9)
 
-	local state = default
+	local state = initial
+	local handle = { name = label }
+
+	local function applyVisual()
+		smoothTween(toggleBg, {BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK}, 0.25)
+		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)}, 0.25)
+	end
+
+	handle.getState = function() return state end
+	handle.setState = function(new, fire)
+		state = new
+		applyVisual()
+		if flag then Config[flag] = state end
+		if fire and callback then pcall(callback, state) end
+		if updateHUD then updateHUD() end
+	end
+	handle.updateBindText = function()
+		local key = keybinds[label]
+		bindBtn.Text = key and key.Name or "＋"
+		bindBtn.TextColor3 = key and COLORS.ACCENT or COLORS.TEXT_SECONDARY
+	end
+
 	local btn = create("TextButton", {
-		Size = UDim2.new(1, 0, 1, 0),
+		Size = UDim2.new(0, 60, 1, 0),
+		Position = UDim2.new(1, -60, 0, 0),
 		BackgroundTransparency = 1,
 		Text = "",
 		Parent = container,
 	})
 	btn.MouseButton1Click:Connect(function()
-		state = not state
-		smoothTween(toggleBg, {BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK}, 0.25)
-		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)}, 0.25)
-		if callback then callback(state) end
+		handle.setState(not state, true)
+		saveConfig()
 	end)
-	return container
+
+	bindBtn.MouseButton1Click:Connect(function()
+		bindListening = handle
+		bindBtn.Text = "..."
+		bindBtn.TextColor3 = COLORS.ACCENT
+	end)
+
+	table.insert(toggleList, handle)
+	toggleByName[label] = handle
+	handle.updateBindText()
+
+	-- apply loaded state effect
+	if flag and Config[flag] ~= nil and state and callback then
+		pcall(callback, state)
+	end
+	if updateHUD then updateHUD() end
+	return handle
 end
 
 local function createButton(parent, label, layoutOrder, color, callback)
@@ -570,9 +679,7 @@ local function createButton(parent, label, layoutOrder, color, callback)
 	addCorner(btn, 10)
 	btn.MouseEnter:Connect(function() smoothTween(btn, {BackgroundTransparency = 0.15}, 0.15) end)
 	btn.MouseLeave:Connect(function() smoothTween(btn, {BackgroundTransparency = 0}, 0.15) end)
-	btn.MouseButton1Click:Connect(function()
-		if callback then callback() end
-	end)
+	btn.MouseButton1Click:Connect(function() if callback then callback() end end)
 	return btn
 end
 
@@ -586,7 +693,6 @@ local function createInput(parent, label, placeholder, layoutOrder, callback)
 	})
 	addCorner(container, 10)
 	addStroke(container, COLORS.BORDER, 1, 0.5)
-
 	create("TextLabel", {
 		Size = UDim2.new(1, -32, 0, 20),
 		Position = UDim2.new(0, 16, 0, 6),
@@ -598,7 +704,6 @@ local function createInput(parent, label, placeholder, layoutOrder, callback)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = container,
 	})
-
 	local box = create("TextBox", {
 		Size = UDim2.new(1, -32, 0, 26),
 		Position = UDim2.new(0, 16, 0, 28),
@@ -615,11 +720,151 @@ local function createInput(parent, label, placeholder, layoutOrder, callback)
 	})
 	addCorner(box, 6)
 	addPadding(box, 0, 0, 8, 8)
-
 	box.FocusLost:Connect(function(enter)
 		if callback then callback(box.Text, enter) end
 	end)
 	return box
+end
+
+-- ============================================================
+-- FUNCTIONS HUD (draggable, shows state + bind)
+-- ============================================================
+local hudFrame = create("Frame", {
+	Name = "FunctionsHUD",
+	Size = UDim2.new(0, 210, 0, 240),
+	Position = UDim2.new(0, 16, 0.5, -120),
+	BackgroundColor3 = COLORS.BG_CARD,
+	BackgroundTransparency = 0.05,
+	BorderSizePixel = 0,
+	Visible = false,
+	Active = true,
+	ZIndex = 150,
+	Parent = screenGui,
+})
+addCorner(hudFrame, 10)
+addStroke(hudFrame, COLORS.BORDER, 1, 0.4)
+
+local hudHeader = create("Frame", {
+	Size = UDim2.new(1, 0, 0, 30),
+	BackgroundColor3 = COLORS.ACCENT,
+	BorderSizePixel = 0,
+	ZIndex = 151,
+	Parent = hudFrame,
+})
+addCorner(hudHeader, 10)
+addGradient(hudHeader, COLORS.ACCENT, COLORS.ACCENT_2, 0)
+create("Frame", {
+	Size = UDim2.new(1, 0, 0, 10),
+	Position = UDim2.new(0, 0, 1, -10),
+	BackgroundColor3 = COLORS.ACCENT,
+	BorderSizePixel = 0,
+	ZIndex = 151,
+	Parent = hudHeader,
+})
+create("TextLabel", {
+	Size = UDim2.new(1, -16, 1, 0),
+	Position = UDim2.new(0, 12, 0, 0),
+	BackgroundTransparency = 1,
+	Text = "Functions",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	TextSize = 13,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	ZIndex = 152,
+	Parent = hudHeader,
+})
+
+local hudList = create("ScrollingFrame", {
+	Size = UDim2.new(1, -12, 1, -38),
+	Position = UDim2.new(0, 6, 0, 34),
+	BackgroundTransparency = 1,
+	BorderSizePixel = 0,
+	ScrollBarThickness = 3,
+	ScrollBarImageColor3 = COLORS.SCROLLBAR,
+	CanvasSize = UDim2.new(0, 0, 0, 0),
+	AutomaticCanvasSize = Enum.AutomaticSize.Y,
+	ZIndex = 151,
+	Parent = hudFrame,
+})
+create("UIListLayout", {
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	Padding = UDim.new(0, 3),
+	Parent = hudList,
+})
+
+-- HUD drag
+do
+	local dragging, ds, sp = false, nil, nil
+	hudHeader.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; ds = input.Position; sp = hudFrame.Position
+		end
+	end)
+	hudHeader.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - ds
+			hudFrame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- Build/refresh HUD entries
+updateHUD = function()
+	if not hudFrame.Visible then return end
+	for _, c in pairs(hudList:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	for i, handle in ipairs(toggleList) do
+		local on = handle.getState()
+		local row = create("Frame", {
+			Size = UDim2.new(1, -4, 0, 22),
+			BackgroundTransparency = 1,
+			LayoutOrder = i,
+			ZIndex = 152,
+			Parent = hudList,
+		})
+		create("Frame", {
+			Size = UDim2.new(0, 8, 0, 8),
+			Position = UDim2.new(0, 2, 0.5, -4),
+			BackgroundColor3 = on and COLORS.ACCENT_GREEN or COLORS.BG_TRACK,
+			BorderSizePixel = 0,
+			ZIndex = 153,
+			Parent = row,
+		}).Name = "Dot"
+		local dot = row:FindFirstChild("Dot")
+		if dot then addCorner(dot, 4) end
+		create("TextLabel", {
+			Size = UDim2.new(1, -60, 1, 0),
+			Position = UDim2.new(0, 16, 0, 0),
+			BackgroundTransparency = 1,
+			Text = handle.name,
+			TextColor3 = on and COLORS.TEXT_PRIMARY or COLORS.TEXT_SECONDARY,
+			TextSize = 11,
+			Font = Enum.Font.GothamMedium,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			ZIndex = 153,
+			Parent = row,
+		})
+		local key = keybinds[handle.name]
+		create("TextLabel", {
+			Size = UDim2.new(0, 44, 1, 0),
+			Position = UDim2.new(1, -46, 0, 0),
+			BackgroundTransparency = 1,
+			Text = key and ("[" .. key.Name .. "]") or "",
+			TextColor3 = COLORS.ACCENT,
+			TextSize = 10,
+			Font = Enum.Font.GothamBold,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			ZIndex = 153,
+			Parent = row,
+		})
+	end
 end
 
 -- ============================================================
@@ -639,27 +884,24 @@ createNavButton("⚙️", "Settings", 7)
 local camPage = createPage("Camera")
 createHeader(camPage, "Camera Controls", 0)
 
--- FOV slider now updates the locked target value
 createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v)
 	lockedFOV = v
-end)
+end, "fov")
 createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v)
 	player.CameraMaxZoomDistance = v
-end)
+end, "maxZoom")
 createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v)
 	player.CameraMinZoomDistance = v
-end)
+end, "minZoom")
 createToggle(camPage, "Shift Lock Enabled", false, 4, function(state)
 	player.DevEnableMouseLock = state
-end)
--- Toggle for the FOV lock (enabled by default)
+end, "shiftLock")
 createToggle(camPage, "Lock FOV", true, 5, function(state)
 	fovLockEnabled = state
-end)
+end, "fovLock")
 createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
 	if state then
 		camera.CameraType = Enum.CameraType.Scriptable
-		local speed = 1
 		RunService:BindToRenderStep("Freecam", 200, function(dt)
 			local move = Vector3.new()
 			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
@@ -668,13 +910,13 @@ createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
 			if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
 			if UserInputService:IsKeyDown(Enum.KeyCode.E) then move += Vector3.new(0, 1, 0) end
 			if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move -= Vector3.new(0, 1, 0) end
-			camera.CFrame = camera.CFrame + move * (speed * dt * 60)
+			camera.CFrame = camera.CFrame + move * (dt * 60)
 		end)
 	else
 		RunService:UnbindFromRenderStep("Freecam")
 		camera.CameraType = Enum.CameraType.Custom
 	end
-end)
+end, "freecam")
 
 -- ============================================================
 -- PAGE: ENVIRONMENT
@@ -684,26 +926,26 @@ createHeader(envPage, "Lighting & Atmosphere", 0)
 
 createSlider(envPage, "Time of Day", CONFIG.MIN_CLOCK, CONFIG.MAX_CLOCK, CONFIG.DEFAULT_CLOCK, 1, function(v)
 	smoothTween(Lighting, {ClockTime = v}, 0.3)
-end)
+end, "clock")
 createSlider(envPage, "Ambient Light", 0, 100, 50, 2, function(v)
 	local m = v / 100
 	Lighting.Ambient = Color3.fromRGB(m * 150, m * 150, m * 160)
-end)
+end, "ambient")
 createSlider(envPage, "Brightness", 0, 4, 2, 3, function(v)
 	Lighting.Brightness = v
-end)
+end, "brightness")
 createSlider(envPage, "Fog Distance", 0, 100, 0, 4, function(v)
 	local fogEnd = 10000 - (v / 100) * 9700
 	Lighting.FogEnd = fogEnd
 	Lighting.FogStart = fogEnd * 0.05
 	Lighting.FogColor = Color3.fromRGB(200, 205, 215)
-end)
+end, "fog")
 createSlider(envPage, "Exposure", -3, 3, 0, 5, function(v)
 	Lighting.ExposureCompensation = v
-end)
+end, "exposure")
 createToggle(envPage, "Global Shadows", true, 6, function(state)
 	Lighting.GlobalShadows = state
-end)
+end, "shadows")
 createButton(envPage, "Set to Midnight 🌙", 7, COLORS.ACCENT_2, function()
 	smoothTween(Lighting, {ClockTime = 0}, 0.5)
 end)
@@ -769,17 +1011,11 @@ dustEmitter.Parent = weatherPart
 
 local rainActive, snowActive, dustActive, lightningActive = false, false, false, false
 
--- Single RenderStepped loop: camera ref, FOV lock, weather follow
 RunService.RenderStepped:Connect(function()
-	if workspace.CurrentCamera ~= camera then
-		camera = workspace.CurrentCamera
-	end
-
-	-- Enforce locked FOV every frame so the game can't override it
+	if workspace.CurrentCamera ~= camera then camera = workspace.CurrentCamera end
 	if fovLockEnabled and camera.FieldOfView ~= lockedFOV then
 		camera.FieldOfView = lockedFOV
 	end
-
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
@@ -795,10 +1031,10 @@ createToggle(wthPage, "Rain", false, 1, function(state)
 		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		rainEmitter.Rate = 0
 	end
-end)
+end, "rain")
 createSlider(wthPage, "Rain Intensity", 50, 800, 300, 2, function(v)
 	if rainActive then rainEmitter.Rate = v end
-end)
+end, "rainRate")
 createToggle(wthPage, "Snow", false, 3, function(state)
 	snowActive = state
 	if state then
@@ -809,14 +1045,14 @@ createToggle(wthPage, "Snow", false, 3, function(state)
 		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		snowEmitter.Rate = 0
 	end
-end)
+end, "snow")
 createSlider(wthPage, "Snow Intensity", 30, 500, 150, 4, function(v)
 	if snowActive then snowEmitter.Rate = v end
-end)
+end, "snowRate")
 createToggle(wthPage, "Dust / Leaves", false, 5, function(state)
 	dustActive = state
 	dustEmitter.Rate = state and 50 or 0
-end)
+end, "dust")
 createToggle(wthPage, "Lightning Flashes", false, 6, function(state)
 	lightningActive = state
 	if state then
@@ -832,12 +1068,12 @@ createToggle(wthPage, "Lightning Flashes", false, 6, function(state)
 			end
 		end)
 	end
-end)
+end, "lightning")
 createSlider(wthPage, "Wind Strength", 0, 50, 10, 7, function(v)
 	snowEmitter.SpreadAngle = Vector2.new(v, v)
 	rainEmitter.SpreadAngle = Vector2.new(v * 0.3, v * 0.3)
 	dustEmitter.Speed = NumberRange.new(v * 0.5, v)
-end)
+end, "wind")
 
 -- ============================================================
 -- PAGE: EFFECTS
@@ -853,47 +1089,46 @@ local letterboxBot = create("Frame", {
 	Size = UDim2.new(1, 0, 0, 0), Position = UDim2.new(0, 0, 1, 0), AnchorPoint = Vector2.new(0, 1),
 	BackgroundColor3 = Color3.fromRGB(0, 0, 0), BorderSizePixel = 0, ZIndex = 100, Parent = screenGui,
 })
-
 createSlider(fxPage, "Cinematic Bars %", 0, 20, 0, 1, function(v)
 	local s = v / 100
 	smoothTween(letterboxTop, {Size = UDim2.new(1, 0, s, 0)}, 0.3)
 	smoothTween(letterboxBot, {Size = UDim2.new(1, 0, s, 0)}, 0.3)
-end)
+end, "bars")
 
 local blurEffect = Instance.new("BlurEffect")
 blurEffect.Size = 0
 blurEffect.Parent = Lighting
 createSlider(fxPage, "Background Blur", 0, 24, 0, 2, function(v)
 	smoothTween(blurEffect, {Size = v}, 0.2)
-end)
+end, "blur")
 
 local cc = Instance.new("ColorCorrectionEffect")
 cc.Parent = Lighting
-createSlider(fxPage, "Saturation", -100, 100, 0, 3, function(v) cc.Saturation = v / 100 end)
-createSlider(fxPage, "Contrast", -100, 100, 0, 4, function(v) cc.Contrast = v / 100 end)
+createSlider(fxPage, "Saturation", -100, 100, 0, 3, function(v) cc.Saturation = v / 100 end, "sat")
+createSlider(fxPage, "Contrast", -100, 100, 0, 4, function(v) cc.Contrast = v / 100 end, "con")
 createSlider(fxPage, "Tint R", 0, 255, 255, 5, function(v)
 	cc.TintColor = Color3.fromRGB(v, cc.TintColor.G * 255, cc.TintColor.B * 255)
-end)
+end, "tintR")
 createSlider(fxPage, "Tint G", 0, 255, 255, 6, function(v)
 	cc.TintColor = Color3.fromRGB(cc.TintColor.R * 255, v, cc.TintColor.B * 255)
-end)
+end, "tintG")
 createSlider(fxPage, "Tint B", 0, 255, 255, 7, function(v)
 	cc.TintColor = Color3.fromRGB(cc.TintColor.R * 255, cc.TintColor.G * 255, v)
-end)
+end, "tintB")
 
 local bloom = Instance.new("BloomEffect")
 bloom.Intensity = 0; bloom.Size = 24; bloom.Threshold = 1; bloom.Parent = Lighting
 createSlider(fxPage, "Bloom Intensity", 0, 100, 0, 8, function(v)
 	bloom.Intensity = v / 100
 	bloom.Threshold = 1 - (v / 200)
-end)
+end, "bloom")
 
 local sunRays = Instance.new("SunRaysEffect")
 sunRays.Intensity = 0; sunRays.Spread = 0.5; sunRays.Parent = Lighting
 createSlider(fxPage, "Sun Rays", 0, 100, 0, 9, function(v)
 	sunRays.Intensity = v / 100
 	sunRays.Spread = 0.2 + (v / 100) * 0.8
-end)
+end, "sunrays")
 
 local dof = Instance.new("DepthOfFieldEffect")
 dof.FarIntensity = 0; dof.NearIntensity = 0; dof.FocusDistance = 20; dof.InFocusRadius = 15
@@ -901,7 +1136,7 @@ dof.Enabled = false; dof.Parent = Lighting
 createToggle(fxPage, "Depth of Field", false, 10, function(state)
 	dof.Enabled = state
 	dof.FarIntensity = state and 0.5 or 0
-end)
+end, "dof")
 
 -- ============================================================
 -- PAGE: EMOTES
@@ -930,75 +1165,45 @@ local function playEmote(animId)
 	if not animId or animId == "" then return end
 	local id = tostring(animId):match("%d+")
 	if not id then return end
-
 	local animator = getAnimator()
 	if not animator then return end
-
-	if currentTrack then
-		currentTrack:Stop(0.1)
-		currentTrack = nil
-	end
-
+	if currentTrack then currentTrack:Stop(0.1); currentTrack = nil end
 	local anim = Instance.new("Animation")
 	anim.AnimationId = "rbxassetid://" .. id
 	currentAnimId = id
-
-	local ok, track = pcall(function()
-		return animator:LoadAnimation(anim)
-	end)
+	local ok, track = pcall(function() return animator:LoadAnimation(anim) end)
 	if not ok or not track then
 		warn("[UnaibleLL] Failed to load animation " .. id)
 		return
 	end
-
 	currentTrack = track
 	track.Looped = emoteLooped
-
-	-- Highest priority so the emote plays over walking/running/jumping
-	pcall(function()
-		track.Priority = Enum.AnimationPriority.Action4
-	end)
-
+	pcall(function() track.Priority = Enum.AnimationPriority.Action4 end)
 	track:Play(0.15)
 	track:AdjustSpeed(emoteSpeed)
 end
 
 local function stopEmote()
-	if currentTrack then
-		currentTrack:Stop(0.15)
-		currentTrack = nil
-	end
+	if currentTrack then currentTrack:Stop(0.15); currentTrack = nil end
 end
 
 createInput(emotePage, "Custom Emote ID", "Enter animation ID (e.g. 507771019)", 1, function(text, enter)
-	if enter and text ~= "" then
-		playEmote(text)
-	end
+	if enter and text ~= "" then playEmote(text) end
 end)
-
 createToggle(emotePage, "Loop Emote", false, 2, function(state)
 	emoteLooped = state
 	if currentTrack then
 		currentTrack.Looped = state
-		if state and not currentTrack.IsPlaying and currentAnimId then
-			playEmote(currentAnimId)
-		end
+		if state and not currentTrack.IsPlaying and currentAnimId then playEmote(currentAnimId) end
 	end
-end)
-
+end, "emoteLoop")
 createSlider(emotePage, "Emote Speed", 0.1, 3, 1, 3, function(v)
 	emoteSpeed = v
-	if currentTrack then
-		currentTrack:AdjustSpeed(v)
-	end
-end)
-
-createButton(emotePage, "⏹ Stop Emote", 4, COLORS.DANGER, function()
-	stopEmote()
-end)
+	if currentTrack then currentTrack:AdjustSpeed(v) end
+end, "emoteSpeed")
+createButton(emotePage, "⏹ Stop Emote", 4, COLORS.DANGER, function() stopEmote() end)
 
 createHeader(emotePage, "Preset Emotes", 5)
-
 local presetEmotes = {
 	{name = "💃 Dance 1", id = "507771019"},
 	{name = "🕺 Dance 2", id = "507776043"},
@@ -1008,16 +1213,10 @@ local presetEmotes = {
 	{name = "👉 Point", id = "507770453"},
 	{name = "😂 Laugh", id = "507770818"},
 }
-
 for i, emote in ipairs(presetEmotes) do
-	createButton(emotePage, emote.name, 5 + i, COLORS.ACCENT, function()
-		playEmote(emote.id)
-	end)
+	createButton(emotePage, emote.name, 5 + i, COLORS.ACCENT, function() playEmote(emote.id) end)
 end
-
-player.CharacterAdded:Connect(function()
-	currentTrack = nil
-end)
+player.CharacterAdded:Connect(function() currentTrack = nil end)
 
 -- ============================================================
 -- PAGE: PLAYER
@@ -1034,18 +1233,18 @@ end
 createSlider(playerPage, "Walk Speed", 16, 200, 16, 1, function(v)
 	local hum = getHumanoid()
 	if hum then hum.WalkSpeed = v end
-end)
+end, "walkspeed")
 createSlider(playerPage, "Jump Power", 50, 300, 50, 2, function(v)
 	local hum = getHumanoid()
 	if hum then hum.UseJumpPower = true; hum.JumpPower = v end
-end)
+end, "jumppower")
 createSlider(playerPage, "Hip Height", 0, 10, 2, 3, function(v)
 	local hum = getHumanoid()
 	if hum then hum.HipHeight = v end
-end)
+end, "hipheight")
 createSlider(playerPage, "Gravity", 0, 400, 196, 4, function(v)
 	workspace.Gravity = v
-end)
+end, "gravity")
 createToggle(playerPage, "Noclip", false, 5, function(state)
 	if state then
 		RunService:BindToRenderStep("Noclip", 1, function()
@@ -1059,15 +1258,18 @@ createToggle(playerPage, "Noclip", false, 5, function(state)
 	else
 		RunService:UnbindFromRenderStep("Noclip")
 	end
-end)
+end, "noclip")
 createToggle(playerPage, "Infinite Jump", false, 6, function(state)
-	if state then
+	if state and not _G.UnaibleLL_InfJump then
+		_G.UnaibleLL_InfJump = true
 		UserInputService.JumpRequest:Connect(function()
-			local hum = getHumanoid()
-			if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+			if toggleByName["Infinite Jump"] and toggleByName["Infinite Jump"].getState() then
+				local hum = getHumanoid()
+				if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+			end
 		end)
 	end
-end)
+end, "infjump")
 createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
 	local char = player.Character
 	if char then
@@ -1088,8 +1290,9 @@ createSlider(setPage, "GUI Transparency %", 0, 80, 0, 1, function(v)
 	topBar.BackgroundTransparency = t
 	sidebarFrame.BackgroundTransparency = t
 	contentArea.BackgroundTransparency = t
-end)
+end, "guiTransparency")
 
+-- FPS counter
 local fpsLabel, fpsDragging, fpsDragStart, fpsStartPos = nil, false, nil, nil
 createToggle(setPage, "FPS Counter (drag to move)", false, 2, function(state)
 	if state then
@@ -1134,7 +1337,7 @@ createToggle(setPage, "FPS Counter (drag to move)", false, 2, function(state)
 	else
 		if fpsLabel then fpsLabel.Visible = false end
 	end
-end)
+end, "fps")
 
 UserInputService.InputChanged:Connect(function(input)
 	if fpsDragging and fpsLabel and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
@@ -1148,7 +1351,13 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
-createToggle(setPage, "Show Coordinates", false, 3, function(state)
+-- Functions HUD toggle
+createToggle(setPage, "Show Functions HUD", false, 3, function(state)
+	hudFrame.Visible = state
+	if state then updateHUD() end
+end, "showHUD")
+
+createToggle(setPage, "Show Coordinates", false, 4, function(state)
 	local existing = screenGui:FindFirstChild("CoordsLabel")
 	if state then
 		if not existing then
@@ -1179,6 +1388,18 @@ createToggle(setPage, "Show Coordinates", false, 3, function(state)
 	else
 		if existing then existing:Destroy() end
 	end
+end, "coords")
+
+createHeader(setPage, "Config", 5)
+createButton(setPage, "💾 Save Config", 6, COLORS.ACCENT_GREEN, function()
+	local ok = saveConfig()
+	if not ok and not canUseFiles() then
+		warn("[UnaibleLL] File saving not supported in this environment (config kept in memory).")
+	end
+end)
+createButton(setPage, "📂 Load Config", 7, COLORS.ACCENT, function()
+	loadConfig()
+	warn("[UnaibleLL] Config loaded. Rejoin or reopen to fully re-apply all values.")
 end)
 
 createButton(setPage, "Reset All to Default", 10, COLORS.DANGER, function()
@@ -1225,6 +1446,40 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- ============================================================
+-- KEYBIND HANDLING (assign + fire)
+-- ============================================================
+UserInputService.InputBegan:Connect(function(input, processed)
+	-- listening to assign a bind
+	if bindListening then
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.Escape then
+				keybinds[bindListening.name] = nil
+			else
+				keybinds[bindListening.name] = input.KeyCode
+			end
+			bindListening.updateBindText()
+			bindListening = nil
+			saveConfig()
+			if updateHUD then updateHUD() end
+			return
+		end
+	end
+
+	if processed then return end
+
+	-- fire matching binds
+	for name, key in pairs(keybinds) do
+		if input.KeyCode == key then
+			local h = toggleByName[name]
+			if h then
+				h.setState(not h.getState(), true)
+				saveConfig()
+			end
+		end
+	end
+end)
+
+-- ============================================================
 -- F1 TOGGLE + OPEN ANIMATION
 -- ============================================================
 local guiOpen = false
@@ -1242,6 +1497,7 @@ end
 
 local function closeGui()
 	guiOpen = false
+	saveConfig()
 	smoothTween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.35)
 	task.delay(0.4, function()
 		if not guiOpen then mainFrame.Visible = false end
@@ -1255,7 +1511,13 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	end
 end)
 
--- Initialize
+-- Save on leave
+game:BindToClose(function() saveConfig() end)
+
+-- ============================================================
+-- INITIALIZE
+-- ============================================================
 switchToTab("Camera")
+updateHUD()
 task.wait(0.5)
 openGui()
