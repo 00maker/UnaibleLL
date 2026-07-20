@@ -1029,35 +1029,68 @@ createNavButton("⚙️", "Settings", 11)
 -- ============================================================
 -- PAGE: CAMERA
 -- ============================================================
-local camPage = createPage("Camera")
-createHeader(camPage, "Camera Controls", 0)
-createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v) lockedFOV = v end, "fov")
-createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v) player.CameraMaxZoomDistance = v end, "maxZoom")
-createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v) player.CameraMinZoomDistance = v end, "minZoom")
-createToggle(camPage, "Shift Lock Enabled", false, 4, function(state) player.DevEnableMouseLock = state end, "shiftLock")
-createToggle(camPage, "Lock FOV", true, 5, function(state)
-	fovLockEnabled = state
-	if state then lockedFOV = camera.FieldOfView end
-end, "fovLock")
-createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
+local freecamCFrame = nil
+local freecamConns = {}
+createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
 	if state then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		-- freeze the character so WASD only moves the camera
+		if hum then
+			hum.WalkSpeed = 0
+			hum.JumpPower = 0
+			hum.PlatformStand = true
+		end
+		freecamCFrame = camera.CFrame
 		camera.CameraType = Enum.CameraType.Scriptable
-		RunService:BindToRenderStep("Freecam", 200, function(dt)
+		fovLockEnabled = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+		local speed = 60
+		freecamConns.step = RunService:BindToRenderStep("UnaibleLL_Freecam", Enum.RenderPriority.Camera.Value + 1, function(dt)
+			local delta = UserInputService:GetMouseDelta()
+			local sens = 0.3
+			-- rotate: yaw around world up, pitch around local right
+			local yaw = -delta.X * sens * dt
+			local pitch = -delta.Y * sens * dt
+			local pos = freecamCFrame.Position
+			local rot = freecamCFrame - pos
+			rot = CFrame.Angles(0, yaw, 0) * rot * CFrame.Angles(pitch, 0, 0)
+
 			local move = Vector3.new()
-			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += rot.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= rot.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= rot.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += rot.RightVector end
 			if UserInputService:IsKeyDown(Enum.KeyCode.E) then move += Vector3.new(0, 1, 0) end
 			if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move -= Vector3.new(0, 1, 0) end
-			camera.CFrame = camera.CFrame + move * (dt * 60)
+			local mult = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 3 or 1
+
+			pos += move * speed * mult * dt
+			freecamCFrame = CFrame.new(pos) * rot
+			camera.CFrame = freecamCFrame
 		end)
 	else
-		RunService:UnbindFromRenderStep("Freecam")
+		RunService:UnbindFromRenderStep("UnaibleLL_Freecam")
+		freecamConns = {}
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		camera.CameraType = Enum.CameraType.Custom
+		-- restore character
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.PlatformStand = false
+			hum.WalkSpeed = targetWalkSpeed
+			hum.JumpPower = targetJumpPower
+		end
+		if char then
+			local root = char:FindFirstChild("HumanoidRootPart")
+			if root then root.Velocity = Vector3.new() end
+		end
+		local h = toggleByName["Lock FOV"]
+		if h then fovLockEnabled = h.getState() end
 	end
 end, "freecam")
-
 -- ============================================================
 -- PAGE: ENVIRONMENT
 -- ============================================================
