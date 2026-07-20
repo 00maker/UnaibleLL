@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v13
+-- UnaibleLL - Client Visual Customization Suite v14
 -- Configs | Keybinds | HUD | Search | Server info | Player list
--- Waypoints | Tracers | Chams | Spectate | Fast tweened teleport
+-- Waypoints | Tracers | Chams | Spectate | Detached Freecam
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -299,7 +299,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 150, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v13",
+	Text = "v14",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -1027,15 +1027,26 @@ createNavButton("💾", "Configs", 10)
 createNavButton("⚙️", "Settings", 11)
 
 -- ============================================================
--- PAGE: CAMERA
+-- PAGE: CAMERA (with detached freecam)
 -- ============================================================
+local camPage = createPage("Camera")
+createHeader(camPage, "Camera Controls", 0)
+createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DEFAULT_FOV, 1, function(v) lockedFOV = v end, "fov")
+createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v) player.CameraMaxZoomDistance = v end, "maxZoom")
+createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v) player.CameraMinZoomDistance = v end, "minZoom")
+createToggle(camPage, "Shift Lock Enabled", false, 4, function(state) player.DevEnableMouseLock = state end, "shiftLock")
+createToggle(camPage, "Lock FOV", true, 5, function(state)
+	fovLockEnabled = state
+	if state then lockedFOV = camera.FieldOfView end
+end, "fovLock")
+
 local freecamCFrame = nil
-local freecamConns = {}
+local freecamSpeed = 60
 createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if state then
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		-- freeze the character so WASD only moves the camera
+		-- freeze the character so movement only affects the camera
 		if hum then
 			hum.WalkSpeed = 0
 			hum.JumpPower = 0
@@ -1045,18 +1056,12 @@ createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
 		camera.CameraType = Enum.CameraType.Scriptable
 		fovLockEnabled = false
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-
-		local speed = 60
-		freecamConns.step = RunService:BindToRenderStep("UnaibleLL_Freecam", Enum.RenderPriority.Camera.Value + 1, function(dt)
-			local delta = UserInputService:GetMouseDelta()
-			local sens = 0.3
-			-- rotate: yaw around world up, pitch around local right
-			local yaw = -delta.X * sens * dt
-			local pitch = -delta.Y * sens * dt
+		RunService:BindToRenderStep("UnaibleLL_Freecam", Enum.RenderPriority.Camera.Value + 1, function(dt)
+			local mDelta = UserInputService:GetMouseDelta()
+			local sens = 0.4
 			local pos = freecamCFrame.Position
 			local rot = freecamCFrame - pos
-			rot = CFrame.Angles(0, yaw, 0) * rot * CFrame.Angles(pitch, 0, 0)
-
+			rot = CFrame.Angles(0, -mDelta.X * sens * dt, 0) * rot * CFrame.Angles(-mDelta.Y * sens * dt, 0, 0)
 			local move = Vector3.new()
 			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += rot.LookVector end
 			if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= rot.LookVector end
@@ -1065,19 +1070,14 @@ createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
 			if UserInputService:IsKeyDown(Enum.KeyCode.E) then move += Vector3.new(0, 1, 0) end
 			if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move -= Vector3.new(0, 1, 0) end
 			local mult = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 3 or 1
-
-			pos += move * speed * mult * dt
+			pos += move * freecamSpeed * mult * dt
 			freecamCFrame = CFrame.new(pos) * rot
 			camera.CFrame = freecamCFrame
 		end)
 	else
 		RunService:UnbindFromRenderStep("UnaibleLL_Freecam")
-		freecamConns = {}
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		camera.CameraType = Enum.CameraType.Custom
-		-- restore character
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		if hum then
 			hum.PlatformStand = false
 			hum.WalkSpeed = targetWalkSpeed
@@ -1085,12 +1085,14 @@ createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
 		end
 		if char then
 			local root = char:FindFirstChild("HumanoidRootPart")
-			if root then root.Velocity = Vector3.new() end
+			if root then root.AssemblyLinearVelocity = Vector3.new() end
 		end
 		local h = toggleByName["Lock FOV"]
 		if h then fovLockEnabled = h.getState() end
 	end
 end, "freecam")
+createSlider(camPage, "Freecam Speed", 10, 300, 60, 7, function(v) freecamSpeed = v end, "freecamSpeed")
+
 -- ============================================================
 -- PAGE: ENVIRONMENT
 -- ============================================================
@@ -1327,7 +1329,6 @@ local function getHRP(char)
 	char = char or player.Character
 	return char and char:FindFirstChild("HumanoidRootPart")
 end
--- Fast teleport: snaps under 100 studs, glides longer hops quickly
 local function teleportTo(targetCFrame)
 	local hrp = getHRP()
 	if not hrp then return end
@@ -2032,7 +2033,6 @@ RunService.RenderStepped:Connect(function()
 	if rainActive or snowActive or dustActive then
 		weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
 	end
-	-- Tracers
 	if tracersEnabled then
 		local teamCheck = toggleByName["Team Check (skip same team)"] and toggleByName["Team Check (skip same team)"].getState()
 		for _, plr in ipairs(Players:GetPlayers()) do
@@ -2063,7 +2063,6 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
-	-- Rebuild chams if a target respawned without one
 	if chamsEnabled then
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= player and plr.Character and not chamObjects[plr] then
@@ -2071,7 +2070,6 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
-	-- Hold spectate camera on target
 	if spectating then
 		if spectating.Parent and spectating.Character then
 			local hum = spectating.Character:FindFirstChildOfClass("Humanoid")
@@ -2085,6 +2083,7 @@ end)
 RunService.Heartbeat:Connect(function()
 	local hum = getHumanoid()
 	if hum then
+		if hum.PlatformStand then return end -- don't fight freecam freeze
 		hum.WalkSpeed = targetWalkSpeed
 		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
