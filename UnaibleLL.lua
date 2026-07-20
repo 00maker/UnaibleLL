@@ -1,7 +1,7 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v8
+-- UnaibleLL - Client Visual Customization Suite v9
 -- Named configs | Autoload | Keybinds | Functions HUD
--- Always-on WalkSpeed + Gravity lock | Capture-FOV lock
+-- Bindable WalkSpeed/Jump | Unbindable weather | Polished UI
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -20,11 +20,12 @@ local camera = workspace.CurrentCamera
 local lockedFOV = 70
 local fovLockEnabled = true
 
--- Player enforcement state (always-on walkspeed + gravity lock)
+-- Player enforcement state
 local targetWalkSpeed = 16
 local targetJumpPower = 50
 local targetGravity = 196
-local speedBypass = false
+local walkSpeedLock = true   -- toggled by bindable "Walk Speed Lock"
+local jumpLock = false       -- toggled by bindable "Jump Lock"
 
 -- ============================================================
 -- STATE: config store, keybinds, control registry
@@ -127,20 +128,20 @@ end
 -- COLORS
 -- ============================================================
 local COLORS = {
-	BG_MAIN = Color3.fromRGB(242, 244, 250),
+	BG_MAIN = Color3.fromRGB(243, 245, 251),
 	BG_SIDEBAR = Color3.fromRGB(252, 253, 255),
-	BG_CONTENT = Color3.fromRGB(246, 248, 253),
+	BG_CONTENT = Color3.fromRGB(247, 249, 253),
 	BG_CARD = Color3.fromRGB(255, 255, 255),
-	BG_HOVER = Color3.fromRGB(233, 238, 250),
-	BG_TRACK = Color3.fromRGB(212, 217, 230),
+	BG_HOVER = Color3.fromRGB(234, 239, 251),
+	BG_TRACK = Color3.fromRGB(214, 219, 232),
 	ACCENT = Color3.fromRGB(88, 126, 255),
-	ACCENT_2 = Color3.fromRGB(140, 100, 255),
+	ACCENT_2 = Color3.fromRGB(150, 105, 255),
 	ACCENT_GREEN = Color3.fromRGB(52, 199, 123),
-	TEXT_PRIMARY = Color3.fromRGB(28, 33, 52),
-	TEXT_SECONDARY = Color3.fromRGB(108, 116, 138),
-	BORDER = Color3.fromRGB(222, 227, 240),
+	TEXT_PRIMARY = Color3.fromRGB(26, 31, 50),
+	TEXT_SECONDARY = Color3.fromRGB(110, 118, 140),
+	BORDER = Color3.fromRGB(224, 229, 242),
 	TOPBAR = Color3.fromRGB(255, 255, 255),
-	SCROLLBAR = Color3.fromRGB(185, 193, 214),
+	SCROLLBAR = Color3.fromRGB(188, 196, 216),
 	DANGER = Color3.fromRGB(235, 78, 88),
 }
 
@@ -191,7 +192,7 @@ local screenGui = create("ScreenGui", {
 })
 
 -- ============================================================
--- MAIN FRAME
+-- MAIN FRAME (gradient border)
 -- ============================================================
 local mainFrame = create("Frame", {
 	Name = "MainPanel",
@@ -203,7 +204,8 @@ local mainFrame = create("Frame", {
 	Parent = screenGui,
 })
 addCorner(mainFrame, 16)
-addStroke(mainFrame, COLORS.BORDER, 1, 0.2)
+local mainStroke = addStroke(mainFrame, COLORS.ACCENT, 1.5, 0.15)
+addGradient(mainStroke, COLORS.ACCENT, COLORS.ACCENT_2, 90)
 
 create("ImageLabel", {
 	Name = "Shadow",
@@ -279,7 +281,7 @@ local badge = create("TextLabel", {
 	Position = UDim2.new(0, 158, 0.5, -9),
 	BackgroundColor3 = COLORS.ACCENT,
 	BackgroundTransparency = 0.85,
-	Text = "v8",
+	Text = "v9",
 	TextColor3 = COLORS.ACCENT,
 	TextSize = 10,
 	Font = Enum.Font.GothamBold,
@@ -318,7 +320,7 @@ create("Frame", {
 	Parent = sidebarFrame,
 })
 local sidebarInner = create("ScrollingFrame", {
-	Size = UDim2.new(1, -18, 1, -20),
+	Size = UDim2.new(1, -18, 1, -66),
 	Position = UDim2.new(0, 9, 0, 12),
 	BackgroundTransparency = 1,
 	BorderSizePixel = 0,
@@ -328,6 +330,38 @@ local sidebarInner = create("ScrollingFrame", {
 	Parent = sidebarFrame,
 })
 create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = sidebarInner})
+
+-- Sidebar profile footer
+local footer = create("Frame", {
+	Size = UDim2.new(1, -18, 0, 44),
+	Position = UDim2.new(0, 9, 1, -50),
+	BackgroundColor3 = COLORS.BG_CARD,
+	BorderSizePixel = 0,
+	Parent = sidebarFrame,
+})
+addCorner(footer, 10)
+addStroke(footer, COLORS.BORDER, 1, 0.5)
+local avatar = create("ImageLabel", {
+	Size = UDim2.new(0, 30, 0, 30),
+	Position = UDim2.new(0, 7, 0.5, -15),
+	BackgroundColor3 = COLORS.BG_HOVER,
+	BorderSizePixel = 0,
+	Image = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=48&h=48",
+	Parent = footer,
+})
+addCorner(avatar, 15)
+create("TextLabel", {
+	Size = UDim2.new(1, -46, 1, 0),
+	Position = UDim2.new(0, 44, 0, 0),
+	BackgroundTransparency = 1,
+	Text = player.DisplayName,
+	TextColor3 = COLORS.TEXT_PRIMARY,
+	TextSize = 12,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Parent = footer,
+})
 
 -- ============================================================
 -- CONTENT AREA
@@ -459,6 +493,12 @@ local function createHeader(parent, text, order)
 	})
 end
 
+-- card hover helper
+local function hoverCard(container, stroke)
+	container.MouseEnter:Connect(function() smoothTween(stroke, {Transparency = 0.1, Color = COLORS.ACCENT}, 0.2) end)
+	container.MouseLeave:Connect(function() smoothTween(stroke, {Transparency = 0.5, Color = COLORS.BORDER}, 0.2) end)
+end
+
 local function createSlider(parent, label, min, max, default, layoutOrder, callback, flag)
 	local initial = default
 	if flag and Config[flag] ~= nil then initial = Config[flag] end
@@ -471,7 +511,8 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		Parent = parent,
 	})
 	addCorner(container, 10)
-	addStroke(container, COLORS.BORDER, 1, 0.5)
+	local st = addStroke(container, COLORS.BORDER, 1, 0.5)
+	hoverCard(container, st)
 	create("TextLabel", {
 		Size = UDim2.new(0.6, 0, 0, 22),
 		Position = UDim2.new(0, 16, 0, 8),
@@ -483,16 +524,22 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = container,
 	})
+	local valueBadge = create("Frame", {
+		Size = UDim2.new(0, 52, 0, 20),
+		Position = UDim2.new(1, -68, 0, 8),
+		BackgroundColor3 = COLORS.BG_HOVER,
+		BorderSizePixel = 0,
+		Parent = container,
+	})
+	addCorner(valueBadge, 6)
 	local valueLbl = create("TextLabel", {
-		Size = UDim2.new(0.35, 0, 0, 22),
-		Position = UDim2.new(0.62, 0, 0, 8),
+		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
 		Text = tostring(initial),
 		TextColor3 = COLORS.ACCENT,
 		TextSize = 12,
 		Font = Enum.Font.GothamBold,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Parent = container,
+		Parent = valueBadge,
 	})
 	local track = create("Frame", {
 		Size = UDim2.new(1, -32, 0, 6),
@@ -567,9 +614,7 @@ local function createSlider(parent, label, min, max, default, layoutOrder, callb
 		end
 	end)
 
-	if flag then
-		controlAppliers[flag] = function(v) setValue(v, true) end
-	end
+	if flag then controlAppliers[flag] = function(v) setValue(v, true) end end
 	if flag and Config[flag] ~= nil and callback then pcall(callback, initial) end
 	return container
 end
@@ -587,9 +632,10 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 		Parent = parent,
 	})
 	addCorner(container, 10)
-	addStroke(container, COLORS.BORDER, 1, 0.5)
+	local st = addStroke(container, COLORS.BORDER, 1, 0.5)
+	hoverCard(container, st)
 	create("TextLabel", {
-		Size = UDim2.new(1, -130, 1, 0),
+		Size = UDim2.new(1, bindable and -130 or -70, 1, 0),
 		Position = UDim2.new(0, 16, 0, 0),
 		BackgroundTransparency = 1,
 		Text = label,
@@ -633,7 +679,7 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 	addCorner(toggleKnob, 9)
 
 	local state = initial
-	local handle = { name = label }
+	local handle = { name = label, bindable = bindable }
 	local function applyVisual()
 		smoothTween(toggleBg, {BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK}, 0.25)
 		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)}, 0.25)
@@ -666,9 +712,7 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 		bindBtn.TextColor3 = COLORS.ACCENT
 	end)
 
-	if flag then
-		controlAppliers[flag] = function(v) handle.setState(v, true) end
-	end
+	if flag then controlAppliers[flag] = function(v) handle.setState(v, true) end end
 
 	table.insert(toggleList, handle)
 	toggleByName[label] = handle
@@ -707,7 +751,8 @@ local function createInput(parent, label, placeholder, layoutOrder, callback)
 		Parent = parent,
 	})
 	addCorner(container, 10)
-	addStroke(container, COLORS.BORDER, 1, 0.5)
+	local st = addStroke(container, COLORS.BORDER, 1, 0.5)
+	hoverCard(container, st)
 	create("TextLabel", {
 		Size = UDim2.new(1, -32, 0, 20),
 		Position = UDim2.new(0, 16, 0, 6),
@@ -740,7 +785,7 @@ local function createInput(parent, label, placeholder, layoutOrder, callback)
 end
 
 -- ============================================================
--- FUNCTIONS HUD
+-- FUNCTIONS HUD (bindable only)
 -- ============================================================
 local hudFrame = create("Frame", {
 	Name = "FunctionsHUD",
@@ -822,43 +867,60 @@ updateHUD = function()
 	for _, c in pairs(hudListF:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
 	end
-	for i, handle in ipairs(toggleList) do
-		local on = handle.getState()
-		local row = create("Frame", {Size = UDim2.new(1, -4, 0, 22), BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 152, Parent = hudListF})
-		local dot = create("Frame", {
-			Size = UDim2.new(0, 8, 0, 8),
-			Position = UDim2.new(0, 2, 0.5, -4),
-			BackgroundColor3 = on and COLORS.ACCENT_GREEN or COLORS.BG_TRACK,
-			BorderSizePixel = 0,
-			ZIndex = 153,
-			Parent = row,
-		})
-		addCorner(dot, 4)
+	local idx = 0
+	for _, handle in ipairs(toggleList) do
+		if handle.bindable then
+			idx += 1
+			local on = handle.getState()
+			local row = create("Frame", {Size = UDim2.new(1, -4, 0, 22), BackgroundTransparency = 1, LayoutOrder = idx, ZIndex = 152, Parent = hudListF})
+			local dot = create("Frame", {
+				Size = UDim2.new(0, 8, 0, 8),
+				Position = UDim2.new(0, 2, 0.5, -4),
+				BackgroundColor3 = on and COLORS.ACCENT_GREEN or COLORS.BG_TRACK,
+				BorderSizePixel = 0,
+				ZIndex = 153,
+				Parent = row,
+			})
+			addCorner(dot, 4)
+			create("TextLabel", {
+				Size = UDim2.new(1, -60, 1, 0),
+				Position = UDim2.new(0, 16, 0, 0),
+				BackgroundTransparency = 1,
+				Text = handle.name,
+				TextColor3 = on and COLORS.TEXT_PRIMARY or COLORS.TEXT_SECONDARY,
+				TextSize = 11,
+				Font = Enum.Font.GothamMedium,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				ZIndex = 153,
+				Parent = row,
+			})
+			local key = keybinds[handle.name]
+			create("TextLabel", {
+				Size = UDim2.new(0, 44, 1, 0),
+				Position = UDim2.new(1, -46, 0, 0),
+				BackgroundTransparency = 1,
+				Text = key and ("[" .. key.Name .. "]") or "",
+				TextColor3 = COLORS.ACCENT,
+				TextSize = 10,
+				Font = Enum.Font.GothamBold,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				ZIndex = 153,
+				Parent = row,
+			})
+		end
+	end
+	if idx == 0 then
+		create("Frame", {Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 1, Parent = hudListF})
 		create("TextLabel", {
-			Size = UDim2.new(1, -60, 1, 0),
-			Position = UDim2.new(0, 16, 0, 0),
+			Size = UDim2.new(1, -8, 0, 40),
+			Position = UDim2.new(0, 4, 0, 0),
 			BackgroundTransparency = 1,
-			Text = handle.name,
-			TextColor3 = on and COLORS.TEXT_PRIMARY or COLORS.TEXT_SECONDARY,
+			Text = "No active functions",
+			TextColor3 = COLORS.TEXT_SECONDARY,
 			TextSize = 11,
-			Font = Enum.Font.GothamMedium,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-			ZIndex = 153,
-			Parent = row,
-		})
-		local key = keybinds[handle.name]
-		create("TextLabel", {
-			Size = UDim2.new(0, 44, 1, 0),
-			Position = UDim2.new(1, -46, 0, 0),
-			BackgroundTransparency = 1,
-			Text = key and ("[" .. key.Name .. "]") or "",
-			TextColor3 = COLORS.ACCENT,
-			TextSize = 10,
-			Font = Enum.Font.GothamBold,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			ZIndex = 153,
-			Parent = row,
+			Font = Enum.Font.Gotham,
+			Parent = hudListF,
 		})
 	end
 end
@@ -884,12 +946,9 @@ createSlider(camPage, "Field of View", CONFIG.MIN_FOV, CONFIG.MAX_FOV, CONFIG.DE
 createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v) player.CameraMaxZoomDistance = v end, "maxZoom")
 createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v) player.CameraMinZoomDistance = v end, "minZoom")
 createToggle(camPage, "Shift Lock Enabled", false, 4, function(state) player.DevEnableMouseLock = state end, "shiftLock")
--- Lock FOV captures whatever FOV is currently in use when enabled
 createToggle(camPage, "Lock FOV", true, 5, function(state)
 	fovLockEnabled = state
-	if state then
-		lockedFOV = camera.FieldOfView
-	end
+	if state then lockedFOV = camera.FieldOfView end
 end, "fovLock")
 createToggle(camPage, "Freecam Mode (WASD + Q/E)", false, 6, function(state)
 	if state then
@@ -933,7 +992,7 @@ createButton(envPage, "Set to Midnight 🌙", 7, COLORS.ACCENT_2, function() smo
 createButton(envPage, "Set to Noon ☀️", 8, COLORS.ACCENT, function() smoothTween(Lighting, {ClockTime = 12}, 0.5) end)
 
 -- ============================================================
--- PAGE: WEATHER
+-- PAGE: WEATHER (all toggles UNbindable)
 -- ============================================================
 local wthPage = createPage("Weather")
 createHeader(wthPage, "Weather Effects", 0)
@@ -1000,7 +1059,7 @@ createToggle(wthPage, "Rain", false, 1, function(state)
 		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		rainEmitter.Rate = 0
 	end
-end, "rain")
+end, "rain", false)
 createSlider(wthPage, "Rain Intensity", 50, 800, 300, 2, function(v) if rainActive then rainEmitter.Rate = v end end, "rainRate")
 createToggle(wthPage, "Snow", false, 3, function(state)
 	snowActive = state
@@ -1012,9 +1071,9 @@ createToggle(wthPage, "Snow", false, 3, function(state)
 		smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1)
 		snowEmitter.Rate = 0
 	end
-end, "snow")
+end, "snow", false)
 createSlider(wthPage, "Snow Intensity", 30, 500, 150, 4, function(v) if snowActive then snowEmitter.Rate = v end end, "snowRate")
-createToggle(wthPage, "Dust / Leaves", false, 5, function(state) dustActive = state; dustEmitter.Rate = state and 50 or 0 end, "dust")
+createToggle(wthPage, "Dust / Leaves", false, 5, function(state) dustActive = state; dustEmitter.Rate = state and 50 or 0 end, "dust", false)
 createToggle(wthPage, "Lightning Flashes", false, 6, function(state)
 	lightningActive = state
 	if state then
@@ -1030,7 +1089,7 @@ createToggle(wthPage, "Lightning Flashes", false, 6, function(state)
 			end
 		end)
 	end
-end, "lightning")
+end, "lightning", false)
 createSlider(wthPage, "Wind Strength", 0, 50, 10, 7, function(v)
 	snowEmitter.SpreadAngle = Vector2.new(v, v)
 	rainEmitter.SpreadAngle = Vector2.new(v * 0.3, v * 0.3)
@@ -1132,22 +1191,23 @@ local function getHumanoid()
 	if char then return char:FindFirstChildOfClass("Humanoid") end
 	return nil
 end
-createSlider(playerPage, "Walk Speed (always locked)", 16, 500, 16, 1, function(v)
+createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v)
 	targetWalkSpeed = v
 	local hum = getHumanoid()
-	if hum then hum.WalkSpeed = v end
+	if hum and walkSpeedLock then hum.WalkSpeed = v end
 end, "walkspeed")
-createSlider(playerPage, "Jump Power", 50, 500, 50, 2, function(v)
+createToggle(playerPage, "Walk Speed Lock", true, 2, function(state) walkSpeedLock = state end, "walkLock")
+createSlider(playerPage, "Jump Power", 50, 500, 50, 3, function(v)
 	targetJumpPower = v
 	local hum = getHumanoid()
-	if hum then hum.UseJumpPower = true; hum.JumpPower = v end
+	if hum and jumpLock then hum.UseJumpPower = true; hum.JumpPower = v end
 end, "jumppower")
-createSlider(playerPage, "Gravity (always locked)", 0, 400, 196, 3, function(v)
+createToggle(playerPage, "Jump Lock", false, 4, function(state) jumpLock = state end, "jumpLockFlag")
+createSlider(playerPage, "Gravity", 0, 400, 196, 5, function(v)
 	targetGravity = v
 	workspace.Gravity = v
 end, "gravity")
-createToggle(playerPage, "Anti-Reset Bypass (jump)", false, 4, function(state) speedBypass = state end, "speedBypass")
-createToggle(playerPage, "Noclip", false, 5, function(state)
+createToggle(playerPage, "Noclip", false, 6, function(state)
 	if state then
 		RunService:BindToRenderStep("Noclip", 1, function()
 			local char = player.Character
@@ -1161,7 +1221,7 @@ createToggle(playerPage, "Noclip", false, 5, function(state)
 		RunService:UnbindFromRenderStep("Noclip")
 	end
 end, "noclip")
-createToggle(playerPage, "Infinite Jump", false, 6, function(state)
+createToggle(playerPage, "Infinite Jump", false, 7, function(state)
 	if state and not _G.UnaibleLL_InfJump then
 		_G.UnaibleLL_InfJump = true
 		UserInputService.JumpRequest:Connect(function()
@@ -1173,7 +1233,7 @@ createToggle(playerPage, "Infinite Jump", false, 6, function(state)
 		end)
 	end
 end, "infjump")
-createButton(playerPage, "Reset Character 🔄", 7, COLORS.DANGER, function()
+createButton(playerPage, "Reset Character 🔄", 8, COLORS.DANGER, function()
 	local char = player.Character
 	if char then local hum = char:FindFirstChildOfClass("Humanoid"); if hum then hum.Health = 0 end end
 end)
@@ -1182,9 +1242,8 @@ end)
 player.CharacterAdded:Connect(function(char)
 	local hum = char:WaitForChild("Humanoid", 5)
 	if hum then
-		hum.WalkSpeed = targetWalkSpeed
-		hum.UseJumpPower = true
-		hum.JumpPower = targetJumpPower
+		if walkSpeedLock then hum.WalkSpeed = targetWalkSpeed end
+		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
 	workspace.Gravity = targetGravity
 end)
@@ -1449,7 +1508,6 @@ end)
 -- ============================================================
 -- ENFORCEMENT LOOPS
 -- ============================================================
--- Visual loop: camera ref, FOV lock, weather follow
 RunService.RenderStepped:Connect(function()
 	if workspace.CurrentCamera ~= camera then camera = workspace.CurrentCamera end
 	if fovLockEnabled and camera.FieldOfView ~= lockedFOV then
@@ -1460,22 +1518,13 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Physics loop: WalkSpeed + Gravity are ALWAYS locked (no toggle)
 RunService.Heartbeat:Connect(function()
 	local hum = getHumanoid()
 	if hum then
-		-- WalkSpeed always hard-locked to the chosen value
-		hum.WalkSpeed = targetWalkSpeed
-		-- Jump uses the smooth ramp only when Anti-Reset Bypass is on
-		if speedBypass then
-			hum.UseJumpPower = true
-			hum.JumpPower = approach(hum.JumpPower, targetJumpPower, 6)
-		end
+		if walkSpeedLock then hum.WalkSpeed = targetWalkSpeed end
+		if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 	end
-	-- Gravity always locked to the chosen value
-	if workspace.Gravity ~= targetGravity then
-		workspace.Gravity = targetGravity
-	end
+	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
 end)
 
 -- ============================================================
