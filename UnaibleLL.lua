@@ -1,5 +1,5 @@
 -- ============================================================
--- UnaibleLL - Client Visual Customization Suite v18
+-- UnaibleLL - Client Visual Customization Suite v19
 -- Place in StarterPlayerScripts or StarterGui
 -- ============================================================
 
@@ -17,6 +17,15 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
+-- Try to grab the control module for clean freecam movement disable
+local controlModule
+task.spawn(function()
+	pcall(function()
+		local ps = player:WaitForChild("PlayerScripts", 10)
+		if ps then controlModule = require(ps:WaitForChild("PlayerModule")) end
+	end)
+end)
+
 local lockedFOV = 70
 local fovLockEnabled = true
 local targetWalkSpeed = 16
@@ -27,6 +36,7 @@ local tpSpeed = 200
 local godMode = false
 local antiStun = false
 local freecamActive = false
+local shiftLockActive = false
 
 local tracersEnabled = false
 local chamsEnabled = false
@@ -42,13 +52,11 @@ local footstepHue = 0
 local auraAttachment = nil
 local currentAuraStyle = nil
 
--- Ghoul/zxc visual state
 local rgbThemeEnabled = false
 local screenGlowEnabled = false
 local watermarkEnabled = false
 local crosshairEnabled = false
 local rgbCursorEnabled = false
-local vignetteEnabled = false
 local globalHue = 0
 
 local STORE_FILE = "UnaibleLL_Store.json"
@@ -61,6 +69,7 @@ local controlAppliers = {}
 local bindListening = nil
 local updateHUD, refreshConfigList, refreshWaypoints
 local searchRegistry = {}
+local shiftLockToggleContainer = nil
 
 local function registerSearchable(frame, label, parent)
 	table.insert(searchRegistry, {frame = frame, label = string.lower(label), parent = parent})
@@ -163,8 +172,8 @@ local function create(className, props)
 	return inst
 end
 
-local function smoothTween(obj, props, dur)
-	TweenService:Create(obj, TweenInfo.new(dur or 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), props):Play()
+local function smoothTween(obj, props, dur, style, dir)
+	TweenService:Create(obj, TweenInfo.new(dur or 0.4, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props):Play()
 end
 
 local function addCorner(p, r) return create("UICorner", {CornerRadius = UDim.new(0, r or 10), Parent = p}) end
@@ -173,8 +182,8 @@ local function addPadding(p, t, b, l, r) return create("UIPadding", {PaddingTop 
 local function addGradient(p, c1, c2, rot) return create("UIGradient", {Color = ColorSequence.new(c1, c2), Rotation = rot or 0, Parent = p}) end
 
 local function hoverCard(container, stroke)
-	container.MouseEnter:Connect(function() smoothTween(stroke, {Transparency = 0.1, Color = COLORS.ACCENT}, 0.2) end)
-	container.MouseLeave:Connect(function() smoothTween(stroke, {Transparency = 0.5, Color = COLORS.BORDER}, 0.2) end)
+	container.MouseEnter:Connect(function() smoothTween(stroke, {Transparency = 0.1, Color = COLORS.ACCENT}, 0.25) end)
+	container.MouseLeave:Connect(function() smoothTween(stroke, {Transparency = 0.5, Color = COLORS.BORDER}, 0.25) end)
 end
 
 local screenGui = create("ScreenGui", {Name = "UnaibleLL", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = playerGui})
@@ -185,6 +194,7 @@ local mainFrame = create("Frame", {Name = "MainPanel", Size = UDim2.new(0, 760, 
 addCorner(mainFrame, 16)
 local ms = addStroke(mainFrame, COLORS.ACCENT, 1.5, 0.15)
 addGradient(ms, COLORS.ACCENT, COLORS.ACCENT_2, 90)
+create("ImageLabel", {Name = "Shadow", Size = UDim2.new(1, 70, 1, 70), Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Image = "rbxassetid://6014261993", ImageColor3 = Color3.fromRGB(50, 60, 100), ImageTransparency = 0.5, ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49, 49, 450, 450), ZIndex = -1, Parent = mainFrame})
 
 local topBar = create("Frame", {Size = UDim2.new(1, 0, 0, 50), BackgroundColor3 = COLORS.TOPBAR, BorderSizePixel = 0, Parent = mainFrame})
 local al = create("Frame", {Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, Parent = topBar})
@@ -195,7 +205,7 @@ addCorner(logoC, 8)
 addGradient(logoC, COLORS.ACCENT, COLORS.ACCENT_2, 45)
 create("TextLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "∞", TextColor3 = Color3.fromRGB(255,255,255), TextSize = 18, Font = Enum.Font.GothamBold, Parent = logoC})
 create("TextLabel", {Size = UDim2.new(0, 120, 1, 0), Position = UDim2.new(0, 56, 0, 0), BackgroundTransparency = 1, Text = "UnaibleLL", TextColor3 = COLORS.TEXT_PRIMARY, TextSize = 17, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, Parent = topBar})
-local bdg = create("TextLabel", {Size = UDim2.new(0, 36, 0, 18), Position = UDim2.new(0, 150, 0.5, -9), BackgroundColor3 = COLORS.ACCENT, BackgroundTransparency = 0.85, Text = "v18", TextColor3 = COLORS.ACCENT, TextSize = 10, Font = Enum.Font.GothamBold, Parent = topBar})
+local bdg = create("TextLabel", {Size = UDim2.new(0, 36, 0, 18), Position = UDim2.new(0, 150, 0.5, -9), BackgroundColor3 = COLORS.ACCENT, BackgroundTransparency = 0.85, Text = "v19", TextColor3 = COLORS.ACCENT, TextSize = 10, Font = Enum.Font.GothamBold, Parent = topBar})
 addCorner(bdg, 5)
 local searchBox = create("TextBox", {Size = UDim2.new(0, 180, 0, 30), Position = UDim2.new(1, -196, 0.5, -15), BackgroundColor3 = COLORS.BG_CONTENT, BorderSizePixel = 0, Text = "", PlaceholderText = "🔍 Search...", PlaceholderColor3 = COLORS.TEXT_SECONDARY, TextColor3 = COLORS.TEXT_PRIMARY, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, Parent = topBar})
 addCorner(searchBox, 8)
@@ -240,22 +250,28 @@ local function switchToTab(name)
 		info.accent.Visible = false
 		info.label.TextColor3 = COLORS.TEXT_SECONDARY
 		info.icon.TextColor3 = COLORS.TEXT_SECONDARY
-		smoothTween(info.btn, {BackgroundTransparency = 1}, 0.2)
+		smoothTween(info.btn, {BackgroundTransparency = 1}, 0.25)
 	end
 	activeTab = name
-	if allPages[name] then allPages[name].Visible = true end
+	if allPages[name] then
+		local pg = allPages[name]
+		pg.Visible = true
+		pg.Position = UDim2.new(0, 12, 0, 0)
+		pg.GroupTransparency = nil
+		smoothTween(pg, {Position = UDim2.new(0, 0, 0, 0)}, 0.4, Enum.EasingStyle.Quint)
+	end
 	if allNavBtns[name] then
 		local info = allNavBtns[name]
 		info.accent.Visible = true
 		info.label.TextColor3 = COLORS.ACCENT
 		info.icon.TextColor3 = COLORS.ACCENT
-		info.btn.BackgroundTransparency = 0
+		smoothTween(info.btn, {BackgroundTransparency = 0}, 0.25)
 		info.btn.BackgroundColor3 = COLORS.BG_HOVER
 	end
 end
 
 local function createNavButton(icon, name, order)
-	local btn = create("TextButton", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = COLORS.BG_HOVER, BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", LayoutOrder = order, AutoButtonColor = false, Parent = sidebarInner})
+	local btn = create("TextButton", {Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = COLORS.BG_HOVER, BackgroundTransparency = 1, BorderSizePixel = 0, Text = "", LayoutOrder = order, AutoButtonColor = false, Parent = sidebarInner})
 	addCorner(btn, 10)
 	local accent = create("Frame", {Size = UDim2.new(0, 3, 0, 16), Position = UDim2.new(0, 2, 0.5, -8), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, Visible = false, Parent = btn})
 	addCorner(accent, 2)
@@ -359,12 +375,12 @@ local function createToggle(parent, label, default, layoutOrder, callback, flag,
 	local toggleKnob = create("Frame", {Size = UDim2.new(0, 16, 0, 16), Position = initial and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8), BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0, Parent = toggleBg})
 	addCorner(toggleKnob, 8)
 	local state = initial
-	local handle = {name = label, bindable = bindable}
+	local handle = {name = label, bindable = bindable, container = container}
 	handle.getState = function() return state end
 	handle.setState = function(new, fire)
 		state = new
 		smoothTween(toggleBg, {BackgroundColor3 = state and COLORS.ACCENT_GREEN or COLORS.BG_TRACK}, 0.2)
-		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)}, 0.2)
+		smoothTween(toggleKnob, {Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)}, 0.2, Enum.EasingStyle.Back)
 		if flag then Config[flag] = state end
 		if fire and callback then pcall(callback, state) end
 		if updateHUD then updateHUD() end
@@ -452,70 +468,79 @@ updateHUD = function()
 end
 
 -- ============================================================
--- QUICK CONTROLS WIDGET (movable + resizable)
+-- QUICK CONTROLS WIDGET (white, 0.5 transparent, scrolling, resizable, blue-knob sliders)
 -- ============================================================
-local qcFrame = create("Frame", {Name = "QuickControls", Size = UDim2.new(0, 220, 0, 150), Position = UDim2.new(1, -240, 0, 80), BackgroundColor3 = Color3.fromRGB(18, 18, 24), BackgroundTransparency = 0.05, BorderSizePixel = 0, Visible = false, Active = true, ZIndex = 160, Parent = overlayGui})
-addCorner(qcFrame, 10)
+local qcFrame = create("Frame", {Name = "QuickControls", Size = UDim2.new(0, 230, 0, 160), Position = UDim2.new(1, -250, 0, 80), BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.5, BorderSizePixel = 0, Visible = false, Active = true, ClipsDescendants = true, ZIndex = 160, Parent = overlayGui})
+addCorner(qcFrame, 12)
 local qcStroke = addStroke(qcFrame, COLORS.ACCENT, 1.5, 0.2)
-local qcHeader = create("Frame", {Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = Color3.fromRGB(28, 28, 38), BorderSizePixel = 0, ZIndex = 161, Parent = qcFrame})
-addCorner(qcHeader, 10)
-create("Frame", {Size = UDim2.new(1, 0, 0, 10), Position = UDim2.new(0, 0, 1, -10), BackgroundColor3 = Color3.fromRGB(28, 28, 38), BorderSizePixel = 0, ZIndex = 161, Parent = qcHeader})
-create("TextLabel", {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = "⚡ Quick Controls", TextColor3 = Color3.fromRGB(255,255,255), TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 162, Parent = qcHeader})
-local qcBody = create("Frame", {Size = UDim2.new(1, -12, 1, -34), Position = UDim2.new(0, 6, 0, 30), BackgroundTransparency = 1, ZIndex = 161, Parent = qcFrame})
-create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = qcBody})
+local qcHeader = create("Frame", {Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.3, BorderSizePixel = 0, ZIndex = 161, Parent = qcFrame})
+addCorner(qcHeader, 12)
+create("Frame", {Size = UDim2.new(1, 0, 0, 12), Position = UDim2.new(0, 0, 1, -12), BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.3, BorderSizePixel = 0, ZIndex = 161, Parent = qcHeader})
+create("TextLabel", {Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = "⚡ Quick Controls", TextColor3 = COLORS.TEXT_PRIMARY, TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 162, Parent = qcHeader})
+local qcScroll = create("ScrollingFrame", {Size = UDim2.new(1, -10, 1, -50), Position = UDim2.new(0, 5, 0, 32), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = COLORS.ACCENT, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 161, Parent = qcFrame})
+create("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6), Parent = qcScroll})
 
--- mini slider builder for the widget
-local function qcMiniSlider(label, min, max, getVal, setVal, order)
-	local row = create("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = Color3.fromRGB(28, 28, 38), BorderSizePixel = 0, LayoutOrder = order, ZIndex = 162, Parent = qcBody})
-	addCorner(row, 6)
-	create("TextLabel", {Size = UDim2.new(0.55, 0, 0, 14), Position = UDim2.new(0, 8, 0, 3), BackgroundTransparency = 1, Text = label, TextColor3 = Color3.fromRGB(200, 200, 215), TextSize = 10, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 163, Parent = row})
-	local valLbl = create("TextLabel", {Size = UDim2.new(0.4, 0, 0, 14), Position = UDim2.new(0.58, 0, 0, 3), BackgroundTransparency = 1, Text = tostring(getVal()), TextColor3 = COLORS.ACCENT, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 163, Parent = row})
-	local track = create("Frame", {Size = UDim2.new(1, -16, 0, 4), Position = UDim2.new(0, 8, 0, 22), BackgroundColor3 = Color3.fromRGB(50, 50, 62), BorderSizePixel = 0, ZIndex = 162, Parent = row})
-	addCorner(track, 2)
-	local fill = create("Frame", {Size = UDim2.new(math.clamp((getVal()-min)/(max-min),0,1), 0, 1, 0), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, ZIndex = 163, Parent = track})
-	addCorner(fill, 2)
+local function qcSlider(label, min, max, getVal, setVal, order)
+	local row = create("Frame", {Size = UDim2.new(1, -4, 0, 44), BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.35, BorderSizePixel = 0, LayoutOrder = order, ZIndex = 162, Parent = qcScroll})
+	addCorner(row, 8)
+	create("TextLabel", {Size = UDim2.new(0.6, 0, 0, 16), Position = UDim2.new(0, 10, 0, 4), BackgroundTransparency = 1, Text = label, TextColor3 = COLORS.TEXT_PRIMARY, TextSize = 11, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 163, Parent = row})
+	local valLbl = create("TextLabel", {Size = UDim2.new(0.35, 0, 0, 16), Position = UDim2.new(0.62, 0, 0, 4), BackgroundTransparency = 1, Text = tostring(getVal()), TextColor3 = COLORS.ACCENT, TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 163, Parent = row})
+	local track = create("Frame", {Size = UDim2.new(1, -20, 0, 5), Position = UDim2.new(0, 10, 0, 30), BackgroundColor3 = COLORS.BG_TRACK, BorderSizePixel = 0, ZIndex = 162, Parent = row})
+	addCorner(track, 3)
+	local ifill = math.clamp((getVal()-min)/(max-min),0,1)
+	local fill = create("Frame", {Size = UDim2.new(ifill, 0, 1, 0), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, ZIndex = 163, Parent = track})
+	addCorner(fill, 3)
 	addGradient(fill, COLORS.ACCENT, COLORS.ACCENT_2, 0)
+	local knob = create("Frame", {Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(ifill, -7, 0.5, -7), BackgroundColor3 = Color3.fromRGB(255,255,255), BorderSizePixel = 0, ZIndex = 164, Parent = track})
+	addCorner(knob, 7)
+	addStroke(knob, COLORS.ACCENT, 2, 0)
 	local dragging = false
 	local function upd(x)
 		local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
 		local v = math.floor(min + (max - min) * rel + 0.5)
 		fill.Size = UDim2.new(rel, 0, 1, 0)
+		knob.Position = UDim2.new(rel, -7, 0.5, -7)
 		valLbl.Text = tostring(v)
 		setVal(v)
 	end
 	track.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; upd(i.Position.X) end end)
+	knob.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true end end)
 	UserInputService.InputChanged:Connect(function(i) if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then upd(i.Position.X) end end)
 	UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end end)
-	return {setDisplay = function() valLbl.Text = tostring(getVal()); fill.Size = UDim2.new(math.clamp((getVal()-min)/(max-min),0,1), 0, 1, 0) end}
+	return {setDisplay = function()
+		local rel = math.clamp((getVal()-min)/(max-min),0,1)
+		valLbl.Text = tostring(getVal())
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		knob.Position = UDim2.new(rel, -7, 0.5, -7)
+	end}
 end
 
-local qcSpeed = qcMiniSlider("Speed", 16, 500, function() return targetWalkSpeed end, function(v)
+local qcSpeed = qcSlider("Speed", 16, 500, function() return targetWalkSpeed end, function(v)
 	targetWalkSpeed = v
 	local h = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if h then h.WalkSpeed = v end
-	if controlAppliers["walkspeed"] then Config.walkspeed = v end
+	Config.walkspeed = v
+	if controlAppliers.walkspeed then end
 end, 1)
-local qcJump = qcMiniSlider("Jump", 50, 500, function() return targetJumpPower end, function(v)
+local qcJump = qcSlider("Jump", 50, 500, function() return targetJumpPower end, function(v)
 	targetJumpPower = v
 	jumpLock = true
 	local h = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if h then h.UseJumpPower = true; h.JumpPower = v end
 end, 2)
-local qcGrav = qcMiniSlider("Gravity", 0, 400, function() return targetGravity end, function(v)
+local qcGrav = qcSlider("Gravity", 0, 400, function() return targetGravity end, function(v)
 	targetGravity = v
 	workspace.Gravity = v
 end, 3)
 
--- drag the widget
 do
 	local d, ds, sp = false, nil, nil
 	qcHeader.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then d = true; ds = i.Position; sp = qcFrame.Position end end)
 	qcHeader.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then d = false end end)
 	UserInputService.InputChanged:Connect(function(i) if d and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then local delta = i.Position - ds; qcFrame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y) end end)
 end
--- resize handle (bottom-right corner)
-local qcResize = create("TextButton", {Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(1, -16, 1, -16), BackgroundColor3 = COLORS.ACCENT, BackgroundTransparency = 0.3, BorderSizePixel = 0, Text = "⤡", TextColor3 = Color3.fromRGB(255,255,255), TextSize = 10, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 163, Parent = qcFrame})
-addCorner(qcResize, 4)
+local qcResize = create("TextButton", {Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -18, 1, -18), BackgroundColor3 = COLORS.ACCENT, BackgroundTransparency = 0.2, BorderSizePixel = 0, Text = "⤡", TextColor3 = Color3.fromRGB(255,255,255), TextSize = 11, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 165, Parent = qcFrame})
+addCorner(qcResize, 5)
 do
 	local rz, rs, initSize = false, nil, nil
 	qcResize.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then rz = true; rs = i.Position; initSize = qcFrame.AbsoluteSize end end)
@@ -523,27 +548,24 @@ do
 	UserInputService.InputChanged:Connect(function(i)
 		if rz and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
 			local delta = i.Position - rs
-			local nw = math.clamp(initSize.X + delta.X, 170, 400)
-			local nh = math.clamp(initSize.Y + delta.Y, 120, 320)
-			qcFrame.Size = UDim2.new(0, nw, 0, nh)
+			qcFrame.Size = UDim2.new(0, math.clamp(initSize.X + delta.X, 180, 420), 0, math.clamp(initSize.Y + delta.Y, 120, 400))
 		end
 	end)
 end
 
--- Nav buttons
+-- NAV
 createNavButton("🎥", "Camera", 1)
 createNavButton("🌤️", "Environment", 2)
 createNavButton("🌧️", "Weather", 3)
 createNavButton("🎬", "Effects", 4)
 createNavButton("✨", "FX", 5)
-createNavButton("💀", "Ghoul", 6)
-createNavButton("💃", "Emotes", 7)
-createNavButton("👤", "Player", 8)
-createNavButton("🎯", "Visuals", 9)
-createNavButton("📡", "Server", 10)
-createNavButton("👥", "Players", 11)
-createNavButton("💾", "Configs", 12)
-createNavButton("⚙️", "Settings", 13)
+createNavButton("💃", "Emotes", 6)
+createNavButton("👤", "Player", 7)
+createNavButton("🎯", "Visuals", 8)
+createNavButton("📡", "Server", 9)
+createNavButton("👥", "Players", 10)
+createNavButton("💾", "Configs", 11)
+createNavButton("⚙️", "Settings", 12)
 
 -- CAMERA
 local camPage = createPage("Camera")
@@ -551,15 +573,22 @@ createHeader(camPage, "Camera Controls", 0)
 createSlider(camPage, "Field of View", 30, 120, 70, 1, function(v) lockedFOV = v end, "fov")
 createSlider(camPage, "Max Zoom Distance", 5, 400, 128, 2, function(v) player.CameraMaxZoomDistance = v end, "maxZoom")
 createSlider(camPage, "Min Zoom Distance", 0.5, 20, 0.5, 3, function(v) player.CameraMinZoomDistance = v end, "minZoom")
-createToggle(camPage, "Shift Lock", false, 4, function(s) player.DevEnableMouseLock = s end, "shiftLock")
+local slHandle = createToggle(camPage, "Shift Lock", false, 4, function(s)
+	shiftLockActive = s
+	if not s then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.AutoRotate = true end
+	end
+end, "shiftLock")
+shiftLockToggleContainer = slHandle.container
 createToggle(camPage, "Lock FOV", true, 5, function(s) fovLockEnabled = s; if s then lockedFOV = camera.FieldOfView end end, "fovLock")
 local freecamCFrame, freecamSpeed = nil, 60
 createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
-	local char = player.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	if state then
 		freecamActive = true
-		if hum then hum.WalkSpeed = 0; hum.JumpPower = 0; hum.PlatformStand = true end
+		-- Disable movement cleanly (no PlatformStand -> no anticheat trigger)
+		if controlModule then pcall(function() controlModule:GetControls():Disable() end) end
 		freecamCFrame = camera.CFrame
 		camera.CameraType = Enum.CameraType.Scriptable
 		fovLockEnabled = false
@@ -586,8 +615,7 @@ createToggle(camPage, "Freecam (WASD/QE + Mouse)", false, 6, function(state)
 		RunService:UnbindFromRenderStep("UnaibleLL_Freecam")
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		camera.CameraType = Enum.CameraType.Custom
-		if hum then hum.PlatformStand = false; hum.WalkSpeed = targetWalkSpeed; hum.JumpPower = targetJumpPower end
-		if char then local r = char:FindFirstChild("HumanoidRootPart"); if r then r.AssemblyLinearVelocity = Vector3.new() end end
+		if controlModule then pcall(function() controlModule:GetControls():Enable() end) end
 		local h = toggleByName["Lock FOV"]; if h then fovLockEnabled = h.getState() end
 	end
 end, "freecam")
@@ -610,51 +638,10 @@ createButton(envPage, "Set to Noon ☀️", 9, COLORS.ACCENT, function() smoothT
 local wthPage = createPage("Weather")
 createHeader(wthPage, "Weather Effects", 0)
 local weatherPart = Instance.new("Part")
-weatherPart.Name = "UnaibleLL_WP"
-weatherPart.Anchored = true
-weatherPart.CanCollide = false
-weatherPart.Transparency = 1
-weatherPart.Size = Vector3.new(80, 1, 80)
-weatherPart.Parent = workspace
-local rainEmitter = Instance.new("ParticleEmitter")
-rainEmitter.Texture = "rbxassetid://5765221959"
-rainEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 200, 220))
-rainEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(1, 0.03)})
-rainEmitter.Lifetime = NumberRange.new(0.8, 1.5)
-rainEmitter.Rate = 0
-rainEmitter.Speed = NumberRange.new(60, 80)
-rainEmitter.SpreadAngle = Vector2.new(5, 5)
-rainEmitter.EmissionDirection = Enum.NormalId.Bottom
-rainEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(0.8, 0.3), NumberSequenceKeypoint.new(1, 1)})
-rainEmitter.LightEmission = 0.1
-rainEmitter.Parent = weatherPart
-local snowEmitter = Instance.new("ParticleEmitter")
-snowEmitter.Texture = "rbxassetid://241685484"
-snowEmitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-snowEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 0.1)})
-snowEmitter.Lifetime = NumberRange.new(3, 6)
-snowEmitter.Rate = 0
-snowEmitter.Speed = NumberRange.new(5, 12)
-snowEmitter.SpreadAngle = Vector2.new(30, 30)
-snowEmitter.EmissionDirection = Enum.NormalId.Bottom
-snowEmitter.Rotation = NumberRange.new(0, 360)
-snowEmitter.RotSpeed = NumberRange.new(-40, 40)
-snowEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.7, 0.1), NumberSequenceKeypoint.new(1, 1)})
-snowEmitter.LightEmission = 0.2
-snowEmitter.Parent = weatherPart
-local dustEmitter = Instance.new("ParticleEmitter")
-dustEmitter.Texture = "rbxassetid://241685484"
-dustEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 160, 100))
-dustEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.08), NumberSequenceKeypoint.new(1, 0.06)})
-dustEmitter.Lifetime = NumberRange.new(4, 8)
-dustEmitter.Rate = 0
-dustEmitter.Speed = NumberRange.new(2, 6)
-dustEmitter.SpreadAngle = Vector2.new(60, 60)
-dustEmitter.EmissionDirection = Enum.NormalId.Left
-dustEmitter.Rotation = NumberRange.new(0, 360)
-dustEmitter.RotSpeed = NumberRange.new(-20, 20)
-dustEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.8, 0.4), NumberSequenceKeypoint.new(1, 1)})
-dustEmitter.Parent = weatherPart
+weatherPart.Name = "UnaibleLL_WP"; weatherPart.Anchored = true; weatherPart.CanCollide = false; weatherPart.Transparency = 1; weatherPart.Size = Vector3.new(80,1,80); weatherPart.Parent = workspace
+local rainEmitter = Instance.new("ParticleEmitter"); rainEmitter.Texture = "rbxassetid://5765221959"; rainEmitter.Color = ColorSequence.new(Color3.fromRGB(180,200,220)); rainEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0,0.05),NumberSequenceKeypoint.new(1,0.03)}); rainEmitter.Lifetime = NumberRange.new(0.8,1.5); rainEmitter.Rate = 0; rainEmitter.Speed = NumberRange.new(60,80); rainEmitter.SpreadAngle = Vector2.new(5,5); rainEmitter.EmissionDirection = Enum.NormalId.Bottom; rainEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(0.8,0.3),NumberSequenceKeypoint.new(1,1)}); rainEmitter.LightEmission = 0.1; rainEmitter.Parent = weatherPart
+local snowEmitter = Instance.new("ParticleEmitter"); snowEmitter.Texture = "rbxassetid://241685484"; snowEmitter.Color = ColorSequence.new(Color3.fromRGB(255,255,255)); snowEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.1)}); snowEmitter.Lifetime = NumberRange.new(3,6); snowEmitter.Rate = 0; snowEmitter.Speed = NumberRange.new(5,12); snowEmitter.SpreadAngle = Vector2.new(30,30); snowEmitter.EmissionDirection = Enum.NormalId.Bottom; snowEmitter.Rotation = NumberRange.new(0,360); snowEmitter.RotSpeed = NumberRange.new(-40,40); snowEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(0.7,0.1),NumberSequenceKeypoint.new(1,1)}); snowEmitter.LightEmission = 0.2; snowEmitter.Parent = weatherPart
+local dustEmitter = Instance.new("ParticleEmitter"); dustEmitter.Texture = "rbxassetid://241685484"; dustEmitter.Color = ColorSequence.new(Color3.fromRGB(180,160,100)); dustEmitter.Size = NumberSequence.new({NumberSequenceKeypoint.new(0,0.08),NumberSequenceKeypoint.new(1,0.06)}); dustEmitter.Lifetime = NumberRange.new(4,8); dustEmitter.Rate = 0; dustEmitter.Speed = NumberRange.new(2,6); dustEmitter.SpreadAngle = Vector2.new(60,60); dustEmitter.EmissionDirection = Enum.NormalId.Left; dustEmitter.Rotation = NumberRange.new(0,360); dustEmitter.RotSpeed = NumberRange.new(-20,20); dustEmitter.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(0.8,0.4),NumberSequenceKeypoint.new(1,1)}); dustEmitter.Parent = weatherPart
 local rainActive, snowActive, dustActive, lightningActive = false, false, false, false
 createToggle(wthPage, "Rain", false, 1, function(s) rainActive = s; if s then smoothTween(Lighting, {FogEnd = 800, FogStart = 10}, 1); Lighting.FogColor = Color3.fromRGB(140,148,160); rainEmitter.Rate = 300 else smoothTween(Lighting, {FogEnd = 10000, FogStart = 0}, 1); rainEmitter.Rate = 0 end end, "rain", false)
 createSlider(wthPage, "Rain Intensity", 50, 800, 300, 2, function(v) if rainActive then rainEmitter.Rate = v end end, "rainRate")
@@ -664,7 +651,7 @@ createToggle(wthPage, "Dust / Leaves", false, 5, function(s) dustActive = s; dus
 createToggle(wthPage, "Lightning Flashes", false, 6, function(s) lightningActive = s; if s then task.spawn(function() while lightningActive and rainActive do task.wait(math.random(3,8)); if not lightningActive or not rainActive then break end; local o = Lighting.Brightness; Lighting.Brightness = 6; task.wait(0.05); Lighting.Brightness = o; task.wait(0.1); Lighting.Brightness = 4; task.wait(0.05); Lighting.Brightness = o end end) end end, "lightning", false)
 createSlider(wthPage, "Wind Strength", 0, 50, 10, 7, function(v) snowEmitter.SpreadAngle = Vector2.new(v,v); rainEmitter.SpreadAngle = Vector2.new(v*0.3, v*0.3); dustEmitter.Speed = NumberRange.new(v*0.5, v) end, "wind")
 
--- EFFECTS
+-- EFFECTS (now includes former Ghoul functions)
 local fxPage = createPage("Effects")
 createHeader(fxPage, "Screen Effects", 0)
 local lbTop = create("Frame", {Size = UDim2.new(1,0,0,0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = Color3.fromRGB(0,0,0), BorderSizePixel = 0, ZIndex = 100, Parent = overlayGui})
@@ -684,6 +671,37 @@ local sunFX = Instance.new("SunRaysEffect"); sunFX.Intensity = 0; sunFX.Spread =
 createSlider(fxPage, "Sun Rays", 0, 100, 0, 9, function(v) sunFX.Intensity = v/100; sunFX.Spread = 0.2 + (v/100)*0.8 end, "sunrays")
 local dofFX = Instance.new("DepthOfFieldEffect"); dofFX.FarIntensity = 0; dofFX.NearIntensity = 0; dofFX.FocusDistance = 20; dofFX.InFocusRadius = 15; dofFX.Enabled = false; dofFX.Parent = Lighting
 createToggle(fxPage, "Depth of Field", false, 10, function(s) dofFX.Enabled = s; dofFX.FarIntensity = s and 0.5 or 0 end, "dof")
+
+-- Former Ghoul functions merged here
+createHeader(fxPage, "Client Visuals (zxc)", 11)
+local glowFrames = {}
+do
+	local th = 3
+	glowFrames.top = create("Frame", {Size = UDim2.new(1, 0, 0, th), Position = UDim2.new(0,0,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
+	glowFrames.bot = create("Frame", {Size = UDim2.new(1, 0, 0, th), Position = UDim2.new(0,0,1,-th), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
+	glowFrames.left = create("Frame", {Size = UDim2.new(0, th, 1, 0), Position = UDim2.new(0,0,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
+	glowFrames.right = create("Frame", {Size = UDim2.new(0, th, 1, 0), Position = UDim2.new(1,-th,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
+end
+local crosshair = create("Frame", {Size = UDim2.new(0, 24, 0, 24), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 130, Parent = overlayGui})
+local chColor = Color3.fromRGB(0, 255, 120)
+local chLines = {}
+chLines.top = create("Frame", {Size = UDim2.new(0, 2, 0, 8), Position = UDim2.new(0.5, -1, 0, 0), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
+chLines.bot = create("Frame", {Size = UDim2.new(0, 2, 0, 8), Position = UDim2.new(0.5, -1, 1, -8), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
+chLines.left = create("Frame", {Size = UDim2.new(0, 8, 0, 2), Position = UDim2.new(0, 0, 0.5, -1), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
+chLines.right = create("Frame", {Size = UDim2.new(0, 8, 0, 2), Position = UDim2.new(1, -8, 0.5, -1), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
+local rgbCursor = create("Frame", {Size = UDim2.new(0, 10, 0, 10), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, Visible = false, ZIndex = 140, Rotation = 45, Parent = overlayGui})
+addStroke(rgbCursor, Color3.fromRGB(255,255,255), 1, 0)
+
+createToggle(fxPage, "RGB Menu Theme", false, 12, function(s) rgbThemeEnabled = s end, "rgbTheme", false)
+createToggle(fxPage, "RGB Screen Border", false, 13, function(s) screenGlowEnabled = s; for _, f in pairs(glowFrames) do f.Visible = s end end, "screenGlow", false)
+createToggle(fxPage, "Crosshair", false, 14, function(s)
+	crosshairEnabled = s
+	crosshair.Visible = s
+	-- hide shift lock toggle when crosshair on
+	if shiftLockToggleContainer then shiftLockToggleContainer.Visible = not s end
+end, "crosshair", false)
+createSlider(fxPage, "Crosshair Hue", 0, 360, 130, 15, function(v) chColor = Color3.fromHSV(v/360, 0.9, 1); for _, l in pairs(chLines) do l.BackgroundColor3 = chColor end end, "crosshairHue")
+createToggle(fxPage, "RGB Cursor", false, 16, function(s) rgbCursorEnabled = s; rgbCursor.Visible = s; UserInputService.MouseIconEnabled = not s end, "rgbCursor", false)
 
 -- FX (player effects)
 local function getHRP2() local c = player.Character; return c and c:FindFirstChild("HumanoidRootPart") end
@@ -731,64 +749,6 @@ auraToggles["Galaxy"] = createToggle(pfxPage, "Galaxy Aura", false, 7, function(
 auraToggles["Holy"] = createToggle(pfxPage, "Holy Aura", false, 8, function(s) selectAura("Holy", s) end, "auraHoly", false)
 auraToggles["Shadow"] = createToggle(pfxPage, "Shadow Aura", false, 9, function(s) selectAura("Shadow", s) end, "auraShadow", false)
 
--- ============================================================
--- GHOUL TAB (zxc-style client-side visuals)
--- ============================================================
-local ghoulPage = createPage("Ghoul")
-createHeader(ghoulPage, "Client Visuals", 0)
-
--- RGB screen border glow
-local glowFrames = {}
-do
-	local th = 3
-	glowFrames.top = create("Frame", {Size = UDim2.new(1, 0, 0, th), Position = UDim2.new(0,0,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
-	glowFrames.bot = create("Frame", {Size = UDim2.new(1, 0, 0, th), Position = UDim2.new(0,0,1,-th), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
-	glowFrames.left = create("Frame", {Size = UDim2.new(0, th, 1, 0), Position = UDim2.new(0,0,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
-	glowFrames.right = create("Frame", {Size = UDim2.new(0, th, 1, 0), Position = UDim2.new(1,-th,0,0), BorderSizePixel = 0, BackgroundColor3 = COLORS.ACCENT, Visible = false, ZIndex = 90, Parent = overlayGui})
-end
-
--- Watermark
-local watermark = create("Frame", {Size = UDim2.new(0, 250, 0, 26), Position = UDim2.new(0, 10, 0, 6), BackgroundColor3 = Color3.fromRGB(15,15,20), BackgroundTransparency = 0.1, BorderSizePixel = 0, Visible = false, ZIndex = 120, Parent = overlayGui})
-addCorner(watermark, 6)
-local wmStroke = addStroke(watermark, COLORS.ACCENT, 1.5, 0)
-local wmAccent = create("Frame", {Size = UDim2.new(0, 3, 1, 0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, ZIndex = 121, Parent = watermark})
-local wmText = create("TextLabel", {Size = UDim2.new(1, -14, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = "UnaibleLL", TextColor3 = Color3.fromRGB(235,235,245), TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 122, Parent = watermark})
-
--- Crosshair
-local crosshair = create("Frame", {Size = UDim2.new(0, 24, 0, 24), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 130, Parent = overlayGui})
-local chColor = Color3.fromRGB(0, 255, 120)
-local chLines = {}
-chLines.top = create("Frame", {Size = UDim2.new(0, 2, 0, 8), Position = UDim2.new(0.5, -1, 0, 0), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
-chLines.bot = create("Frame", {Size = UDim2.new(0, 2, 0, 8), Position = UDim2.new(0.5, -1, 1, -8), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
-chLines.left = create("Frame", {Size = UDim2.new(0, 8, 0, 2), Position = UDim2.new(0, 0, 0.5, -1), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
-chLines.right = create("Frame", {Size = UDim2.new(0, 8, 0, 2), Position = UDim2.new(1, -8, 0.5, -1), BorderSizePixel = 0, BackgroundColor3 = chColor, ZIndex = 131, Parent = crosshair})
-
--- RGB cursor
-local rgbCursor = create("Frame", {Size = UDim2.new(0, 10, 0, 10), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, Visible = false, ZIndex = 140, Rotation = 45, Parent = overlayGui})
-addStroke(rgbCursor, Color3.fromRGB(255,255,255), 1, 0)
-
--- Vignette
-local vignette = create("ImageLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Image = "rbxassetid://6014261993", ImageColor3 = Color3.fromRGB(0,0,0), ImageTransparency = 0.4, ScaleType = Enum.ScaleType.Slice, SliceCenter = Rect.new(49,49,450,450), Visible = false, ZIndex = 80, Parent = overlayGui})
-
-createToggle(ghoulPage, "RGB Menu Theme", false, 1, function(s) rgbThemeEnabled = s end, "rgbTheme", false)
-createToggle(ghoulPage, "RGB Screen Border", false, 2, function(s)
-	screenGlowEnabled = s
-	for _, f in pairs(glowFrames) do f.Visible = s end
-end, "screenGlow", false)
-createToggle(ghoulPage, "Watermark", false, 3, function(s) watermarkEnabled = s; watermark.Visible = s end, "watermark", false)
-createToggle(ghoulPage, "Crosshair", false, 4, function(s) crosshairEnabled = s; crosshair.Visible = s end, "crosshair", false)
-createSlider(ghoulPage, "Crosshair Hue", 0, 360, 130, 5, function(v)
-	chColor = Color3.fromHSV(v/360, 0.9, 1)
-	for _, l in pairs(chLines) do l.BackgroundColor3 = chColor end
-end, "crosshairHue")
-createToggle(ghoulPage, "RGB Cursor", false, 6, function(s)
-	rgbCursorEnabled = s
-	rgbCursor.Visible = s
-	UserInputService.MouseIconEnabled = not s
-end, "rgbCursor", false)
-createToggle(ghoulPage, "Vignette", false, 7, function(s) vignetteEnabled = s; vignette.Visible = s end, "vignette", false)
-createSlider(ghoulPage, "Vignette Strength", 0, 90, 60, 8, function(v) vignette.ImageTransparency = 1 - (v/100) end, "vignetteStr")
-
 -- EMOTES
 local emotePage = createPage("Emotes")
 createHeader(emotePage, "Emote Player", 0)
@@ -819,7 +779,7 @@ local function applyGodMode(hum)
 	pcall(function() hum.RequiresNeck = false end)
 	hum.Health = hum.MaxHealth
 end
-local speedControl = createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v) targetWalkSpeed = v; local h = getHumanoid(); if h then h.WalkSpeed = v end; qcSpeed.setDisplay() end, "walkspeed")
+createSlider(playerPage, "Walk Speed", 16, 500, 16, 1, function(v) targetWalkSpeed = v; local h = getHumanoid(); if h then h.WalkSpeed = v end; qcSpeed.setDisplay() end, "walkspeed")
 createSlider(playerPage, "Jump Power", 50, 500, 50, 2, function(v) targetJumpPower = v; local h = getHumanoid(); if h and jumpLock then h.UseJumpPower = true; h.JumpPower = v end; qcJump.setDisplay() end, "jumppower")
 createToggle(playerPage, "Jump Lock", false, 3, function(s) jumpLock = s end, "jumpLockFlag")
 createSlider(playerPage, "Gravity", 0, 400, 196, 4, function(v) targetGravity = v; workspace.Gravity = v; qcGrav.setDisplay() end, "gravity")
@@ -832,14 +792,7 @@ createSlider(playerPage, "Teleport Speed", 20, 500, 200, 10, function(v) tpSpeed
 createToggle(playerPage, "Quick Controls Widget", false, 11, function(s) qcFrame.Visible = s end, "qcWidget", false)
 createHeader(playerPage, "Waypoints", 12)
 local wpBox = createInput(playerPage, "Waypoint Name", "Name this spot, then Save", 13, nil)
-createButton(playerPage, "📍 Save Current Position", 14, COLORS.ACCENT_GREEN, function()
-	local hrp = getHRP()
-	if hrp and wpBox.Text ~= "" then
-		Store.waypoints[wpBox.Text] = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z}
-		saveStore(); wpBox.Text = ""
-		if refreshWaypoints then refreshWaypoints() end
-	end
-end)
+createButton(playerPage, "📍 Save Current Position", 14, COLORS.ACCENT_GREEN, function() local hrp = getHRP(); if hrp and wpBox.Text ~= "" then Store.waypoints[wpBox.Text] = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z}; saveStore(); wpBox.Text = ""; if refreshWaypoints then refreshWaypoints() end end end)
 local wpHolder = create("Frame", {Size = UDim2.new(1,0,0,10), BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 15, Parent = playerPage})
 create("UIListLayout", {SortOrder = Enum.SortOrder.Name, Padding = UDim.new(0,5), Parent = wpHolder})
 refreshWaypoints = function()
@@ -886,16 +839,45 @@ local function makeTracer(plr) if tracerObjects[plr] then return end; tracerObje
 createToggle(visPage, "Tracers", false, 1, function(s) tracersEnabled = s; if not s then for p,_ in pairs(tracerObjects) do removeTracer(p) end end end, "tracers")
 createToggle(visPage, "Player Chams", false, 2, function(s) chamsEnabled = s; if s then for _,p in ipairs(Players:GetPlayers()) do if p ~= player then makeCham(p) end end else for p,_ in pairs(chamObjects) do removeCham(p) end end end, "chams")
 createSlider(visPage, "ESP Color (Hue)", 0, 360, 220, 3, function(v) chamColor = Color3.fromHSV(v/360, 0.7, 1); for _,hl in pairs(chamObjects) do hl.FillColor = chamColor end; for _,ln in pairs(tracerObjects) do ln.BackgroundColor3 = chamColor end end, "espHue")
-createToggle(visPage, "Team Check (skip same team)", false, 4, function() end, "teamCheck")
-createHeader(visPage, "Item ESP (YBA)", 5)
-local YBA_ITEMS = {["Mysterious Arrow"]=true, ["Lucky Arrow"]=true, ["Rokakaka Fruit"]=true, ["Requiem Arrow"]=true, ["Rib Cage of The Saint's Corpse"]=true, ["Steel Ball"]=true, ["Stone Mask"]=true, ["Aja Mask"]=true, ["Diamond"]=true, ["Pure Rokakaka"]=true, ["Gold Coin"]=true, ["Diary"]=true, ["Quinton's DIO's Diary"]=true, ["Half Stone Mask"]=true}
-createToggle(visPage, "Item Chams", false, 6, function(s)
+createHeader(visPage, "Item ESP (YBA)", 4)
+local YBA_ITEMS = {["Mysterious Arrow"]=true, ["Lucky Arrow"]=true, ["Rokakaka Fruit"]=true, ["Requiem Arrow"]=true, ["Rib Cage of The Saint's Corpse"]=true, ["Steel Ball"]=true, ["Stone Mask"]=true, ["Aja Mask"]=true, ["Diamond"]=true, ["Pure Rokakaka"]=true, ["Gold Coin"]=true, ["Diary"]=true, ["Half Stone Mask"]=true}
+createToggle(visPage, "Item Chams", false, 5, function(s)
 	itemChamsEnabled = s
 	if not s then for _, hl in pairs(itemHighlights) do if hl and hl.Parent then hl:Destroy() end end; itemHighlights = {} end
 end, "itemChams")
 Players.PlayerRemoving:Connect(function(plr) removeTracer(plr); removeCham(plr) end)
 Players.PlayerAdded:Connect(function(plr) plr.CharacterAdded:Connect(function() task.wait(0.5); if chamsEnabled and plr ~= player then makeCham(plr) end end) end)
 for _, plr in ipairs(Players:GetPlayers()) do if plr ~= player then plr.CharacterAdded:Connect(function() task.wait(0.5); if chamsEnabled then makeCham(plr) end end) end end
+
+-- Throttled item ESP scanner (fixes lag + detection)
+task.spawn(function()
+	while true do
+		if itemChamsEnabled then
+			for _, item in ipairs(workspace:GetDescendants()) do
+				local nm = item.Name
+				if (item:IsA("Model") or item:IsA("Tool") or item:IsA("BasePart")) and YBA_ITEMS[nm] and not itemHighlights[item] then
+					local ok = pcall(function()
+						local hl = Instance.new("Highlight")
+						hl.FillColor = Color3.fromRGB(255, 215, 0)
+						hl.FillTransparency = 0.25
+						hl.OutlineColor = Color3.fromRGB(255, 255, 0)
+						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+						hl.Adornee = item
+						hl.Parent = item
+						itemHighlights[item] = hl
+					end)
+				end
+			end
+			for item, hl in pairs(itemHighlights) do
+				if not item.Parent or not hl.Parent then
+					if hl and hl.Parent then hl:Destroy() end
+					itemHighlights[item] = nil
+				end
+			end
+		end
+		task.wait(1.5)
+	end
+end)
 
 -- SERVER
 local srvPage = createPage("Server")
@@ -927,7 +909,7 @@ task.spawn(function()
 	end
 end)
 
--- PLAYERS (spectate)
+-- PLAYERS
 local plrPage = createPage("Players")
 createHeader(plrPage, "Player List", 0)
 local spectating = nil
@@ -947,9 +929,8 @@ local function spectatePlayer(target)
 		local char = spectating.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if not hrp then return end
-		local look = hrp.Position + Vector3.new(0, 2, 0)
 		local behind = hrp.CFrame * CFrame.new(0, 3, 12)
-		camera.CFrame = CFrame.lookAt(behind.Position, look)
+		camera.CFrame = CFrame.lookAt(behind.Position, hrp.Position + Vector3.new(0, 2, 0))
 	end)
 end
 local plrHolder = create("Frame", {Size = UDim2.new(1,0,0,10), BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = plrPage})
@@ -997,12 +978,26 @@ refreshConfigList = function()
 	end
 end
 
--- SETTINGS
+-- SETTINGS (watermark moved here)
 local setPage = createPage("Settings")
 createHeader(setPage, "UI Settings", 0)
 createSlider(setPage, "GUI Transparency %", 0, 80, 0, 1, function(v) local t = v/100; mainFrame.BackgroundTransparency = t; topBar.BackgroundTransparency = t; sidebarFrame.BackgroundTransparency = t; contentArea.BackgroundTransparency = t end, "guiTrans")
 createToggle(setPage, "Show Keybind HUD", false, 2, function(s) hudFrame.Visible = s; if s then updateHUD() end end, "showHUD")
-createToggle(setPage, "Anti-AFK", false, 3, function(s) if s and not _G.UnaibleLL_AntiAFK then _G.UnaibleLL_AntiAFK = true; local vu = game:GetService("VirtualUser"); player.Idled:Connect(function() if toggleByName["Anti-AFK"] and toggleByName["Anti-AFK"].getState() then pcall(function() vu:Button2Down(Vector2.new(0,0), camera.CFrame); task.wait(1); vu:Button2Up(Vector2.new(0,0), camera.CFrame) end) end end) end end, "antiafk")
+
+-- Watermark (movable, controlled from settings)
+local watermark = create("Frame", {Size = UDim2.new(0, 260, 0, 26), Position = UDim2.new(0, 10, 0, 6), BackgroundColor3 = Color3.fromRGB(15,15,20), BackgroundTransparency = 0.1, BorderSizePixel = 0, Visible = false, Active = true, ZIndex = 120, Parent = overlayGui})
+addCorner(watermark, 6)
+local wmStroke = addStroke(watermark, COLORS.ACCENT, 1.5, 0)
+local wmAccent = create("Frame", {Size = UDim2.new(0, 3, 1, 0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = COLORS.ACCENT, BorderSizePixel = 0, ZIndex = 121, Parent = watermark})
+local wmText = create("TextLabel", {Size = UDim2.new(1, -14, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = "UnaibleLL", TextColor3 = Color3.fromRGB(235,235,245), TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 122, Parent = watermark})
+do
+	local d, ds, sp = false, nil, nil
+	watermark.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then d = true; ds = i.Position; sp = watermark.Position end end)
+	watermark.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then d = false end end)
+	UserInputService.InputChanged:Connect(function(i) if d and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then local delta = i.Position - ds; watermark.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y) end end)
+end
+createToggle(setPage, "Watermark (drag to move)", false, 3, function(s) watermarkEnabled = s; watermark.Visible = s end, "watermark", false)
+createToggle(setPage, "Anti-AFK", false, 4, function(s) if s and not _G.UnaibleLL_AntiAFK then _G.UnaibleLL_AntiAFK = true; local vu = game:GetService("VirtualUser"); player.Idled:Connect(function() if toggleByName["Anti-AFK"] and toggleByName["Anti-AFK"].getState() then pcall(function() vu:Button2Down(Vector2.new(0,0), camera.CFrame); task.wait(1); vu:Button2Up(Vector2.new(0,0), camera.CFrame) end) end end) end end, "antiafk")
 
 -- DRAGGING
 local dragging, dragStart, startPos = false, nil, nil
@@ -1049,7 +1044,25 @@ RunService.RenderStepped:Connect(function()
 	if fovLockEnabled and camera.FieldOfView ~= lockedFOV then camera.FieldOfView = lockedFOV end
 	if rainActive or snowActive or dustActive then weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0)) end
 
-	-- global RGB hue
+	-- shift lock (proper client implementation)
+	if shiftLockActive and not freecamActive then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hum and hrp then
+			if not UserInputService:GetFocusedTextBox() then
+				UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			end
+			hum.AutoRotate = false
+			local look = camera.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			if flat.Magnitude > 0.001 then
+				flat = flat.Unit
+				hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + flat)
+			end
+		end
+	end
+
 	globalHue = (globalHue + 0.004) % 1
 	local rgb = Color3.fromHSV(globalHue, 0.8, 1)
 	if rgbThemeEnabled then
@@ -1069,9 +1082,8 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	if tracersEnabled then
-		local tc = toggleByName["Team Check (skip same team)"] and toggleByName["Team Check (skip same team)"].getState()
 		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= player and not (tc and plr.Team == player.Team) then
+			if plr ~= player then
 				local char = plr.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if hrp then
@@ -1099,19 +1111,6 @@ RunService.RenderStepped:Connect(function()
 				local hl = chamObjects[plr]
 				if not hl or not hl.Parent or hl.Adornee ~= plr.Character then makeCham(plr) end
 			end
-		end
-	end
-
-	if itemChamsEnabled then
-		for _, item in ipairs(workspace:GetDescendants()) do
-			if (item:IsA("Model") or item:IsA("Tool") or item:IsA("BasePart")) and YBA_ITEMS[item.Name] and not itemHighlights[item] then
-				local hl = Instance.new("Highlight")
-				hl.FillColor = Color3.fromRGB(255, 215, 0); hl.FillTransparency = 0.25; hl.OutlineColor = Color3.fromRGB(255, 255, 0); hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Adornee = item; hl.Parent = item
-				itemHighlights[item] = hl
-			end
-		end
-		for item, hl in pairs(itemHighlights) do
-			if not item.Parent or not hl.Parent then if hl.Parent then hl:Destroy() end; itemHighlights[item] = nil end
 		end
 	end
 
@@ -1151,9 +1150,8 @@ RunService.Heartbeat:Connect(function()
 				end
 			end
 			if hum.WalkSpeed == 0 then hum.WalkSpeed = targetWalkSpeed end
-			if hum.JumpPower == 0 and jumpLock then hum.JumpPower = targetJumpPower end
 		end
-		if not hum.PlatformStand then
+		if not hum.PlatformStand and not freecamActive then
 			hum.WalkSpeed = targetWalkSpeed
 			if jumpLock then hum.UseJumpPower = true; hum.JumpPower = targetJumpPower end
 		end
@@ -1161,19 +1159,20 @@ RunService.Heartbeat:Connect(function()
 	if workspace.Gravity ~= targetGravity then workspace.Gravity = targetGravity end
 end)
 
--- F1 TOGGLE
+-- F1 TOGGLE (smoother)
 local guiOpen = false
 local function openGui()
 	guiOpen = true
 	mainFrame.Visible = true
-	mainFrame.Size = UDim2.new(0, 0, 0, 0)
-	mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-	TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 760, 0, 520), Position = UDim2.new(0.5, -380, 0.5, -260)}):Play()
+	mainFrame.Size = UDim2.new(0, 200, 0, 140)
+	mainFrame.Position = UDim2.new(0.5, -100, 0.5, -70)
+	mainFrame.BackgroundTransparency = 1
+	TweenService:Create(mainFrame, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.new(0, 760, 0, 520), Position = UDim2.new(0.5, -380, 0.5, -260), BackgroundTransparency = 0}):Play()
 end
 local function closeGui()
 	guiOpen = false
-	smoothTween(mainFrame, {Size = UDim2.new(0,0,0,0), Position = UDim2.new(0.5,0,0.5,0)}, 0.3)
-	task.delay(0.35, function() if not guiOpen then mainFrame.Visible = false end end)
+	smoothTween(mainFrame, {Size = UDim2.new(0, 200, 0, 140), Position = UDim2.new(0.5, -100, 0.5, -70), BackgroundTransparency = 1}, 0.35)
+	task.delay(0.4, function() if not guiOpen then mainFrame.Visible = false end end)
 end
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
